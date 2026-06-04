@@ -3,6 +3,9 @@
 **/.env
 **/data/*.db
 **/data/*.db-*
+# استثناء صريح: لقطة القاعدة الأولية يجب أن تُشحن داخل صورة Docker
+!backend/seed-data/
+!backend/seed-data/initial.db
 **/dist
 **/.cache
 **/*.log
