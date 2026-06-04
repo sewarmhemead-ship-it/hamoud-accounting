@@ -4,10 +4,16 @@ let browserPromise = null
 
 async function getBrowser() {
   if (!browserPromise) {
-    browserPromise = puppeteer.launch({
+    const opts = {
       headless: 'new',
       args: ['--no-sandbox', '--disable-setuid-sandbox'],
-    })
+    }
+    // في الحاوية نستعمل Chromium الخاص بالنظام (PUPPETEER_EXECUTABLE_PATH)
+    // بدل تنزيل نسخة puppeteer؛ محلياً تبقى النسخة المُنزَّلة هي الافتراضية.
+    if (process.env.PUPPETEER_EXECUTABLE_PATH) {
+      opts.executablePath = process.env.PUPPETEER_EXECUTABLE_PATH
+    }
+    browserPromise = puppeteer.launch(opts)
   }
   return browserPromise
 }
