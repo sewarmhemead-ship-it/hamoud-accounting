@@ -1,0 +1,20 @@
+CREATE TABLE IF NOT EXISTS daily_profit (
+  id               INTEGER PRIMARY KEY AUTOINCREMENT,
+  date             TEXT    NOT NULL UNIQUE,
+  num_trucks       INTEGER NOT NULL DEFAULT 0,
+  clearance_diff   REAL    NOT NULL DEFAULT 0,
+  transport_diff   REAL    NOT NULL DEFAULT 0,
+  workers_diff     REAL    NOT NULL DEFAULT 0,
+  driver_diff      REAL    NOT NULL DEFAULT 0,
+  credit_diff      REAL    NOT NULL DEFAULT 0,
+  gross_profit     REAL    NOT NULL DEFAULT 0,
+  office_expenses  REAL    NOT NULL DEFAULT 0,
+  home_expenses    REAL    NOT NULL DEFAULT 0,
+  net_profit       REAL    NOT NULL DEFAULT 0,
+  notes            TEXT,
+  is_deleted       INTEGER NOT NULL DEFAULT 0,
+  created_at       TEXT    NOT NULL DEFAULT (datetime('now')),
+  updated_at       TEXT    NOT NULL DEFAULT (datetime('now')),
+  created_by       INTEGER REFERENCES users(id),
+  updated_by       INTEGER REFERENCES users(id)
+);

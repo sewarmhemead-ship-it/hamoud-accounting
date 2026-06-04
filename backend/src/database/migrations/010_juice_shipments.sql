@@ -1,0 +1,30 @@
+CREATE TABLE IF NOT EXISTS juice_shipments (
+  id               INTEGER PRIMARY KEY AUTOINCREMENT,
+  ref_number       TEXT    NOT NULL UNIQUE,
+  date             TEXT    NOT NULL,
+  product_type     TEXT    NOT NULL,
+  units_sent       INTEGER NOT NULL,
+  units_lost       INTEGER NOT NULL DEFAULT 0,
+  units_received   INTEGER NOT NULL,
+  capital          REAL    NOT NULL DEFAULT 0,
+  turkish_transport REAL   NOT NULL DEFAULT 0,
+  tarseem          REAL    NOT NULL DEFAULT 0,
+  workers          REAL    NOT NULL DEFAULT 0,
+  clearance_fee    REAL    NOT NULL DEFAULT 0,
+  driver_cost      REAL    NOT NULL DEFAULT 0,
+  cost_per_unit    REAL    NOT NULL,
+  sale_price       REAL    NOT NULL,
+  profit_per_unit  REAL    NOT NULL,
+  total_profit     REAL    NOT NULL,
+  center_id        INTEGER NOT NULL REFERENCES centers(id),
+  driver           TEXT,
+  border_id        INTEGER REFERENCES borders(id),
+  notes            TEXT,
+  is_deleted       INTEGER NOT NULL DEFAULT 0,
+  created_at       TEXT    NOT NULL DEFAULT (datetime('now')),
+  updated_at       TEXT    NOT NULL DEFAULT (datetime('now')),
+  created_by       INTEGER REFERENCES users(id),
+  updated_by       INTEGER REFERENCES users(id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_juice_center ON juice_shipments(center_id);

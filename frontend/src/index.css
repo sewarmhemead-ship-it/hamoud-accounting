@@ -1,0 +1,106 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  html,
+  body {
+    @apply min-h-screen;
+    font-family: 'IBM Plex Sans Arabic', 'Segoe UI', Tahoma, Arial, sans-serif;
+    background: #0a0c10;
+    color: #e8eaf0;
+  }
+
+  input,
+  select,
+  textarea {
+    @apply bg-surface-card border border-surface-border rounded-lg px-3 py-2 text-ink
+           placeholder:text-ink-faint focus:outline-none focus:ring-2 focus:ring-accent/40 focus:border-accent/40;
+  }
+
+  /* شريط تمرير رفيع متناسق مع الثيم */
+  ::-webkit-scrollbar {
+    width: 4px;
+    height: 4px;
+  }
+  ::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  ::-webkit-scrollbar-thumb {
+    background: #ffffff1f;
+    border-radius: 2px;
+  }
+}
+
+@layer components {
+  .btn {
+    @apply inline-flex items-center justify-center gap-2 rounded-lg px-4 py-2 text-sm font-medium
+           transition-all disabled:opacity-50 disabled:cursor-not-allowed;
+  }
+  .btn-primary {
+    @apply btn text-[#0a0c10] font-semibold shadow-gold;
+    background: linear-gradient(135deg, #c9a84c 0%, #a07828 100%);
+  }
+  .btn-primary:hover:not(:disabled) {
+    background: linear-gradient(135deg, #e8c96a 0%, #c9a84c 100%);
+    box-shadow: 0 4px 20px #c9a84c40;
+    transform: translateY(-1px);
+  }
+  .btn-secondary {
+    @apply btn bg-surface-hover hover:bg-surface-raised text-ink-soft hover:text-ink border border-surface-border;
+  }
+  .btn-success {
+    @apply btn text-success border border-success/30;
+    background: #22c55e18;
+  }
+  .btn-success:hover:not(:disabled) {
+    background: #22c55e2a;
+  }
+  .btn-danger {
+    @apply btn text-danger border border-danger/30;
+    background: #ef444418;
+  }
+  .btn-danger:hover:not(:disabled) {
+    background: #ef44442a;
+  }
+
+  .card {
+    @apply bg-surface-card border border-surface-border rounded-xl p-5;
+  }
+
+  /* بطاقة بشريط لوني علوي (KPI) */
+  .stat-card {
+    @apply relative bg-surface-card border border-surface-border rounded-xl p-4 overflow-hidden transition-colors;
+  }
+  .stat-card:hover {
+    @apply border-white/15;
+  }
+  .stat-card::before {
+    content: '';
+    @apply absolute top-0 right-0 left-0 h-0.5;
+  }
+  .stat-card.tone-gold::before {
+    background: linear-gradient(90deg, #c9a84c, transparent);
+  }
+  .stat-card.tone-green::before {
+    background: linear-gradient(90deg, #22c55e, transparent);
+  }
+  .stat-card.tone-amber::before {
+    background: linear-gradient(90deg, #f59e0b, transparent);
+  }
+  .stat-card.tone-blue::before {
+    background: linear-gradient(90deg, #3b82f6, transparent);
+  }
+  .stat-card.tone-red::before {
+    background: linear-gradient(90deg, #ef4444, transparent);
+  }
+
+  .label {
+    @apply block text-sm text-ink-soft mb-1;
+  }
+
+  /* شارة حالة دائرية */
+  .pill {
+    @apply inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-semibold whitespace-nowrap;
+  }
+}

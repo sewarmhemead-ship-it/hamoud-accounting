@@ -1,0 +1,139 @@
+const BaseModel = require('./BaseModel')
+
+class TransactionModel extends BaseModel {
+  constructor() {
+    super('transactions', {
+      center_id: 'center_id',
+      type: 'type',
+      currency: 'currency',
+      category: 'category',
+      is_delivered: 'is_delivered',
+      shipment_id: 'shipment_id',
+    })
+  }
+
+  sumByCenter(centerId, currency = 'USD') {
+    return this.db
+      .prepare(
+        `
+      SELECT
+        COALESCE(SUM(CASE WHEN type = 'out' THEN amount_usd ELSE 0 END), 0) AS total_out,
+        COALESCE(SUM(CASE WHEN type = 'in'  THEN amount_usd ELSE 0 END), 0) AS total_in
+      FROM transactions
+      WHERE center_id = ?
+        AND currency = ?
+        AND is_deleted = 0
+        AND is_delivered = 1
+    `
+      )
+      .get(centerId, currency)
+  }
+
+  findByCenter(
+    centerId,
+    { from, to, type, is_delivered, limit = 50, offset = 0 } = {}
+  ) {
+    const conditions = ['t.center_id = ?', 't.is_deleted = 0']
+    const params = [centerId]
+
+    if (from) {
+      conditions.push('t.date >= ?')
+      params.push(from)
+    }
+    if (to) {
+      conditions.push('t.date <= ?')
+      params.push(to)
+    }
+    if (type) {
+      conditions.push('t.type = ?')
+      params.push(type)
+    }
+    if (is_delivered !== undefined) {
+      conditions.push('t.is_delivered = ?')
+      params.push(is_delivered ? 1 : 0)
+    }
+
+    const where = conditions.join(' AND ')
+
+    const rows = this.db
+      .prepare(
+        `
+      SELECT
+        t.*,
+        c.name AS center_name,
+        s.ref_number AS shipment_ref,
+        s.goods_name,
+        s.source,
+        s.destination,
+        s.weight,
+        s.tarseem,
+        s.workers,
+        s.door_receipt,
+        s.clearance_fee,
+        s.syrian_driver,
+        s.turkish_transport,
+        s.other_expenses,
+        s.total_cost AS shipment_total
+      FROM transactions t
+      LEFT JOIN centers c ON t.center_id = c.id
+      LEFT JOIN shipments s ON s.id = t.shipment_id
+      WHERE ${where}
+      ORDER BY t.date DESC, t.id DESC
+      LIMIT ? OFFSET ?
+    `
+      )
+      .all(...params, limit, offset)
+
+    const { count: total } = this.db
+      .prepare(`SELECT COUNT(*) as count FROM transactions t WHERE ${where}`)
+      .get(...params)
+
+    return { rows, total }
+  }
+
+  sumPostedClearancesByDate(date) {
+    // الترحيل المزدوج يُنشئ قيدين بنفس الفئة (clearance): قيد على التاجر (فاتورة =
+    // price) وقيد على المخلص (تكلفة = cost). إيراد تخليص الشركة هو فاتورة التاجر فقط،
+    // لذا نقصُر الجمع على القيود التي مركزها من نوع «تاجر» تجنباً لمضاعفة الرقم.
+    return this.db
+      .prepare(
+        `
+      SELECT COALESCE(SUM(t.amount_usd), 0) AS total, COUNT(*) AS count
+      FROM transactions t
+      INNER JOIN shipments s ON s.id = t.shipment_id
+      INNER JOIN centers c ON c.id = t.center_id
+      WHERE t.type = 'out'
+        AND t.category = 'clearance'
+        AND t.is_deleted = 0
+        AND c.type = 'trader'
+        AND date(s.posted_at) = date(?)
+    `
+      )
+      .get(date)
+  }
+
+  sumPaymentsByDate(date) {
+    return this.db
+      .prepare(
+        `
+      SELECT COALESCE(SUM(amount_usd), 0) AS total
+      FROM transactions
+      WHERE type = 'in'
+        AND is_deleted = 0
+        AND date(date) = date(?)
+    `
+      )
+      .get(date)
+  }
+
+  findByShipment(shipmentId) {
+    // قد يُنتج الترحيل المزدوج قيدين (تاجر + مخلص) لنفس السيارة، فنُعيدهما معاً.
+    return this.db
+      .prepare(
+        'SELECT * FROM transactions WHERE shipment_id = ? AND is_deleted = 0 ORDER BY id'
+      )
+      .all(shipmentId)
+  }
+}
+
+module.exports = new TransactionModel()

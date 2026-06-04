@@ -1,0 +1,11 @@
+# منع نسخ التبعيات/الأسرار/قاعدة البيانات إلى صورة Docker
+**/node_modules
+**/.env
+**/data/*.db
+**/data/*.db-*
+**/dist
+**/.cache
+**/*.log
+.git
+.gitignore
+*.md
