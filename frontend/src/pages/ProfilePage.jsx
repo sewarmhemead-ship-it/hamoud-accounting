@@ -9,20 +9,35 @@ import GlassPanel from '../components/ui/GlassPanel'
 import AvatarUpload from '../components/chat/AvatarUpload'
 import UserAvatar from '../components/chat/UserAvatar'
 
+function userIdFromToken(token) {
+  if (!token) return null
+  try {
+    const payload = JSON.parse(atob(token.split('.')[1]))
+    return typeof payload.id === 'number' ? payload.id : null
+  } catch {
+    return null
+  }
+}
+
 export default function ProfilePage() {
   const { id } = useParams()
   const navigate = useNavigate()
   const queryClient = useQueryClient()
   const currentUser = useAuthStore((s) => s.user)
+  const token = useAuthStore((s) => s.token)
   const showToast = useUiStore((s) => s.showToast)
-  const userId = id ? parseInt(id, 10) : currentUser?.id
-  const isSelf = !id || userId === currentUser?.id
+  const routeUserId = id ? parseInt(id, 10) : null
+  const selfUserId = currentUser?.id ?? userIdFromToken(token)
+  const userId = routeUserId ?? selfUserId
+  const isSelf = !id || (selfUserId != null && routeUserId === selfUserId)
+  const canFetch = id ? Number.isFinite(routeUserId) : !!token
 
-  const { data: profileRes, isLoading } = useQuery({
-    queryKey: ['profile', userId],
+  const { data: profileRes, isPending, isError, error, refetch } = useQuery({
+    queryKey: ['profile', id || 'me'],
     queryFn: () =>
-      isSelf && !id ? profileApi.me() : profileApi.get(userId),
-    enabled: !!userId,
+      isSelf && !id ? profileApi.me() : profileApi.get(routeUserId),
+    enabled: canFetch,
+    retry: 1,
   })
 
   const profile = profileRes?.data
@@ -52,8 +67,8 @@ export default function ProfilePage() {
     mutationFn: (image) => profileApi.uploadAvatar(image),
     onSuccess: (res) => {
       const url = res?.data?.avatar_url
-      if (url && userId) {
-        queryClient.setQueryData(['profile', userId], (old) => {
+      if (url) {
+        queryClient.setQueryData(['profile', id || 'me'], (old) => {
           if (!old?.data) return old
           return { ...old, data: { ...old.data, avatar_url: url } }
         })
@@ -74,9 +89,38 @@ export default function ProfilePage() {
     onError: (e) => showToast(e.message || 'تعذّر بدء المحادثة', 'error'),
   })
 
-  if (isLoading || !profile) {
+  if (!canFetch) {
+    return (
+      <GlassPanel className="p-8 text-center">
+        <p className="text-sm text-ink-soft">جاري تحميل بيانات الحساب…</p>
+      </GlassPanel>
+    )
+  }
+
+  if (isPending) {
     return (
       <div className="h-64 rounded-2xl animate-pulse glass-panel" />
+    )
+  }
+
+  if (isError) {
+    return (
+      <GlassPanel className="p-8 text-center space-y-4">
+        <p className="text-sm text-ink-soft">
+          {error?.message || 'تعذّر تحميل الملف الشخصي'}
+        </p>
+        <button type="button" className="btn-primary" onClick={() => refetch()}>
+          إعادة المحاولة
+        </button>
+      </GlassPanel>
+    )
+  }
+
+  if (!profile) {
+    return (
+      <GlassPanel className="p-8 text-center">
+        <p className="text-sm text-ink-soft">الملف الشخصي غير موجود</p>
+      </GlassPanel>
     )
   }
 

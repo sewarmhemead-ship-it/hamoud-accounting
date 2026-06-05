@@ -6,6 +6,11 @@ param(
 
 $ErrorActionPreference = 'Stop'
 $batPath = Join-Path $PackageDir 'start-prod.bat'
+$extractPs1 = Join-Path $PSScriptRoot 'extract-node-runtime.ps1'
+$extractDest = Join-Path $PackageDir 'extract-node-runtime.ps1'
+if (Test-Path $extractPs1) {
+    Copy-Item -LiteralPath $extractPs1 -Destination $extractDest -Force
+}
 
 $content = @'
 @echo off
@@ -28,20 +33,41 @@ if not exist "backend\.env" (
 )
 
 set "NODE_EXE=%~dp0node-runtime\node.exe"
-if not exist "%NODE_EXE%" set "NODE_EXE=C:\Program Files\nodejs\node.exe"
 if not exist "%NODE_EXE%" (
-  echo Node.js not found. Reinstall Hamoud Accounting from SewarTech setup.
+  echo جاري تجهيز Node.js المضمّن...
+  powershell -NoProfile -ExecutionPolicy Bypass -File "%~dp0extract-node-runtime.ps1" -AppRoot "%~dp0."
+  set "NODE_EXE=%~dp0node-runtime\node.exe"
+)
+if not exist "%NODE_EXE%" (
+  echo فشل تجهيز Node. أعد فك الحزمة أو تواصل مع SewarTech.
   pause
   exit /b 1
 )
 
-echo Starting server http://localhost:3001 ...
-echo Using Node: %NODE_EXE%
+echo تجهيز المكتبات لأول تشغيل...
+powershell -NoProfile -ExecutionPolicy Bypass -File "%~dp0first-run-setup.ps1" -AppRoot "%~dp0."
+if errorlevel 1 (
+  echo فشل الإعداد الأولي. تواصل مع SewarTech.
+  pause
+  exit /b 1
+)
+
+echo تشغيل الخادم http://localhost:3001 ...
+echo Node: %NODE_EXE%
 cd backend
 set NODE_ENV=production
-start "Hamoud Server" cmd /k ""%NODE_EXE%" server.js"
+start "Hamoud Server" cmd /k "cd /d "%~dp0backend" && "%NODE_EXE%" server.js"
 
-timeout /t 3 /nobreak >nul
+echo انتظار جاهزية الخادم...
+set /a WAIT=0
+:wait_health
+timeout /t 2 /nobreak >nul
+set /a WAIT+=2
+powershell -NoProfile -Command "try { $r=Invoke-WebRequest -Uri 'http://127.0.0.1:3001/api/health' -UseBasicParsing -TimeoutSec 3; if($r.StatusCode -eq 200){exit 0}else{exit 1} } catch { exit 1 }"
+if %ERRORLEVEL% equ 0 goto open_browser
+if %WAIT% geq 30 goto open_browser
+goto wait_health
+:open_browser
 start http://localhost:3001
 echo.
 echo Ready. UI + API on port 3001.

@@ -40,6 +40,7 @@ if ([string]::IsNullOrWhiteSpace($OutDir)) {
 $CustomerDb = Join-Path $BackendSrc "seed-data\customer-ready.db"
 $CentersJson = Join-Path $BackendSrc "seed-data\centers-master.json"
 $DevDb = Join-Path $BackendSrc "data\hamoud.db"
+$CustomerNodeVersion = (& $Node -v).Trim()
 
 function Write-Step([string]$msg) {
     Write-Host ""
@@ -47,12 +48,16 @@ function Write-Step([string]$msg) {
 }
 
 function Invoke-Npm {
-    param([string]$WorkingDir, [string[]]$NpmArgs)
+    param(
+        [string]$WorkingDir,
+        [string[]]$NpmArgs,
+        [string]$NpmCmd = $Npm
+    )
     $argLine = ($NpmArgs -join " ")
     Write-Host "    npm $argLine  (cwd: $WorkingDir)"
     Push-Location $WorkingDir
     try {
-        & $Npm @NpmArgs
+        & $NpmCmd @NpmArgs
         if ($LASTEXITCODE -ne 0) { throw "npm failed (exit $LASTEXITCODE): npm $argLine" }
     } finally {
         Pop-Location
@@ -156,12 +161,22 @@ Copy-Item -LiteralPath $CentersJson -Destination (Join-Path $seedDir "centers-ma
 Copy-Item -LiteralPath $CustomerDb -Destination (Join-Path $dataDir "hamoud.db") -Force
 Write-Host "    restore.js copies seed-data/customer-ready.db if hamoud.db missing/empty (centers=0)" -ForegroundColor DarkGray
 
-Write-Step "Production npm ci --omit=dev in package backend"
+Write-Step "Production npm ci --omit=dev (build machine Node)"
 Invoke-Npm $BackendDst @("ci", "--omit=dev")
+$BundleNode = $Node
+
+Write-Step "Bundle Node.js $CustomerNodeVersion zip for customer"
+$ensureZip = Join-Path $RepoRoot "installer\ensure-node-zip.ps1"
+if (-not (Test-Path $ensureZip)) { throw "Missing $ensureZip" }
+$nodeZip = & $ensureZip -OutDir (Join-Path $RepoRoot "installer") -NodeVersion $CustomerNodeVersion
+Copy-Item -LiteralPath $nodeZip -Destination (Join-Path $PackageRoot (Split-Path $nodeZip -Leaf)) -Force
+Copy-Item -LiteralPath (Join-Path $RepoRoot "installer\extract-node-runtime.ps1") -Destination (Join-Path $PackageRoot "extract-node-runtime.ps1") -Force
+Copy-Item -LiteralPath (Join-Path $RepoRoot "installer\first-run-setup.ps1") -Destination (Join-Path $PackageRoot "first-run-setup.ps1") -Force
+Set-Content -LiteralPath (Join-Path $PackageRoot "node-version.txt") -Value $CustomerNodeVersion -Encoding ASCII
 
 Write-Step "Create package backend/.env"
 $envContent = @"
-# Hamoud customer package — SewarTech (برمجة وتطوير)
+# Hamoud customer package - SewarTech
 NODE_ENV=production
 PORT=3001
 DB_PATH=./data/hamoud.db
@@ -172,12 +187,6 @@ JWT_EXPIRES_IN=7d
 "@
 $utf8NoBom = New-Object System.Text.UTF8Encoding $false
 [System.IO.File]::WriteAllText((Join-Path $BackendDst ".env"), $envContent.Trim(), $utf8NoBom)
-
-Write-Step "Portable Node.js 20 LTS (node-runtime)"
-$ensureNode = Join-Path $RepoRoot "installer\ensure-node-runtime.ps1"
-if (-not (Test-Path $ensureNode)) { throw "Missing $ensureNode" }
-$nodeRuntimeDir = Join-Path $PackageRoot "node-runtime"
-& $ensureNode -TargetDir $nodeRuntimeDir | Out-Null
 
 Write-Step "Launcher scripts (start-prod.bat, start.bat, backup-db.bat)"
 $patchStart = Join-Path $RepoRoot "installer\patch-start-prod.ps1"
@@ -215,62 +224,25 @@ pause
 '@ | Set-Content -LiteralPath (Join-Path $PackageRoot "backup-db.bat") -Encoding ASCII
 
 Write-Step "README (Arabic)"
-$readmePath = Join-Path $PackageRoot "README-زبون.md"
-$readmeUtf8 = @'
-# حمود للمحاسبة — دليل الزبون
-
-حزمة تشغيل محلية كاملة (Windows): خادم Node، واجهة مبنية، قاعدة بيانات جاهزة للعمل.
-
-## المتطلبات
-
-- **Windows 10/11** فقط — **لا حاجة لتثبيت Node.js يدوياً**
-- الحزمة تتضمن **Node.js 20 LTS** في `node-runtime\`
-- `start-prod.bat` يستخدم `node-runtime\node.exe` أولاً، ثم `C:\Program Files\nodejs\` كاحتياط
-
-## التثبيت
-
-1. شغّل **`HamoudAccounting-Setup.exe`** (مثبت SewarTech) أو فك ضغط الحزمة إلى مجلد ثابت.
-2. (موصى به) عدّل `JWT_SECRET` في `backend\.env`.
-3. شغّل **start-prod.bat** (أو **start.bat**) أو الاختصار من قائمة ابدأ.
-4. المتصفح: http://localhost:3001
-
-## تسجيل الدخول
-
-| المستخدم | كلمة المرور |
-|----------|-------------|
-| `admin` | `admin123` |
-
-## ما المُحمّل مسبقاً؟
-
-| البيان | الحالة |
-|--------|--------|
-| معابر، عملات، أنواع بضائع | جاهزة |
-| **15 مركز** (تجار / مخلصين) | من `centers-master.json` |
-| مستخدم `admin` | جاهز |
-| سيارات، شحنات، حركات، أرباح، محادثات | فارغة |
-
-## أين تُحفظ البيانات؟
-
-- التشغيل: `backend\data\hamoud.db`
-- نسخ يدوية: **backup-db.bat** → `backups\hamoud_YYYYMMDD_HHMMSS.db`
-
-### استعادة القاعدة الافتراضية
-
-إذا حُذفت `hamoud.db` أو كانت بلا مراكز، ينسخ `restore.js` من `backend\seed-data\customer-ready.db` عند الإقلاع (لا يستبدل قاعدة فيها مراكز).
-
-في هذه الحزمة وُضعت `hamoud.db` من `customer-ready.db` عند التعبئة — جاهزة من أول تشغيل.
-
-## استكشاف الأخطاء
-
-- المنفذ 3001 مشغول: غيّر `PORT` في `backend\.env`.
-- فحص الخدمة: http://localhost:3001/api/health
-
----
-
-**SoftwareTech** — دعم فني، تخصيص، ونشر أنظمة محاسبة وتخليص جمركي.
-'@
+$readmePath = Join-Path $PackageRoot "README-customer.md"
+$readmeSrc = Join-Path $RepoRoot "docs\dalil-alzaboon.md"
+if (Test-Path $readmeSrc) {
+    Copy-Item -LiteralPath $readmeSrc -Destination $readmePath -Force
+} else {
+    Set-Content -LiteralPath $readmePath -Value "# Hamoud customer package - SewarTech" -Encoding UTF8
+}
 $utf8Bom = New-Object System.Text.UTF8Encoding $true
-[System.IO.File]::WriteAllText($readmePath, $readmeUtf8.Trim(), $utf8Bom)
+
+$quickReadmePath = Join-Path $PackageRoot "START-HERE.txt"
+$quickLines = @(
+    "Hamoud Accounting - SewarTech",
+    "1) Extract ZIP to a fixed folder",
+    "2) Run start-prod.bat only - do NOT install Node manually",
+    "3) Browser: http://localhost:3001",
+    "4) Login: admin / admin123",
+    "Uses bundled Node.js in node-runtime (no manual install)"
+)
+[System.IO.File]::WriteAllLines($quickReadmePath, $quickLines, $utf8Bom)
 
 if ($Zip) {
     Write-Step "Create ZIP"
@@ -287,7 +259,7 @@ if (-not $SkipSmokeTest) {
     Push-Location $BackendDst
     try {
         $env:SMOKE_DB = $dbPath
-        $countsJson = & $Node -e "const Database=require('better-sqlite3');const db=new Database(process.env.SMOKE_DB,{readonly:true});const centers=db.prepare('SELECT count(*) AS c FROM centers WHERE is_deleted=0').get().c;let shipments=0;try{shipments=db.prepare('SELECT count(*) AS c FROM shipments').get().c}catch(_){};console.log(JSON.stringify({centers,shipments}));db.close();"
+        $countsJson = & $BundleNode (Join-Path $BackendDst "scripts\smoke-package-counts.js")
         Remove-Item Env:SMOKE_DB -ErrorAction SilentlyContinue
         $counts = $countsJson | ConvertFrom-Json
         if ($counts.centers -ne 15) { throw "Expected 15 centers, got $($counts.centers)" }
@@ -300,8 +272,9 @@ if (-not $SkipSmokeTest) {
     $smokePort = 30991
     $proc = $null
     try {
-        $cmdLine = "set NODE_ENV=production&& set PORT=$smokePort&& `"$Node`" server.js"
-        $proc = Start-Process -FilePath "cmd.exe" -ArgumentList "/c", $cmdLine `
+        $env:NODE_ENV = "production"
+        $env:PORT = "$smokePort"
+        $proc = Start-Process -FilePath $BundleNode -ArgumentList "server.js" `
             -WorkingDirectory $BackendDst -PassThru -WindowStyle Hidden
         $healthUrl = "http://127.0.0.1:$smokePort/api/health"
         $ok = $false
@@ -317,7 +290,7 @@ if (-not $SkipSmokeTest) {
     } finally {
         if ($proc -and -not $proc.HasExited) {
             Stop-Process -Id $proc.Id -Force -ErrorAction SilentlyContinue
-            Get-Process -Name "node" -ErrorAction SilentlyContinue | Where-Object { $_.Path -eq $Node } | Stop-Process -Force -ErrorAction SilentlyContinue
+            Get-Process -Name "node" -ErrorAction SilentlyContinue | Where-Object { $_.Path -eq $BundleNode } | Stop-Process -Force -ErrorAction SilentlyContinue
         }
     }
 }
@@ -330,7 +303,7 @@ Write-Host ""
 Write-Host "========================================" -ForegroundColor Green
 Write-Host "  PACKAGE READY" -ForegroundColor Green
 Write-Host "  Path: $PackageRoot" -ForegroundColor Green
-Write-Host "  Size: ~$sizeMb MB ($sizeBytes bytes)" -ForegroundColor Green
+Write-Host "  Size: ~$sizeMb MB" -ForegroundColor Green
 if ($Zip) { Write-Host "  ZIP: $(Join-Path $ReleaseRoot 'HamoudAccounting.zip')" -ForegroundColor Green }
 Write-Host "========================================" -ForegroundColor Green
 if (Test-Path $DevDb) {

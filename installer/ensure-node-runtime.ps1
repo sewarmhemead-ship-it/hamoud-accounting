@@ -18,9 +18,13 @@ $ver = $NodeVersion -replace '^v', ''
 $nodeExe = Join-Path $TargetDir 'node.exe'
 
 if (Test-Path $nodeExe) {
-    $v = & $nodeExe -v 2>$null
-    Write-Host "    Node runtime OK: $nodeExe ($v)" -ForegroundColor DarkGray
-    return $TargetDir
+    $v = (& $nodeExe -v 2>$null).Trim()
+    if ($v -eq $NodeVersion) {
+        Write-Host "    Node runtime OK: $nodeExe ($v)" -ForegroundColor DarkGray
+        return $TargetDir
+    }
+    Write-Host "    Replacing Node $v with $NodeVersion ..." -ForegroundColor Yellow
+    Remove-Item -LiteralPath $TargetDir -Recurse -Force -ErrorAction SilentlyContinue
 }
 
 $cacheDir = Join-Path $env:TEMP 'hamoud-node-cache'
@@ -46,5 +50,10 @@ if (Test-Path $TargetDir) { Remove-Item -LiteralPath $TargetDir -Recurse -Force 
 $null = New-Item -ItemType Directory -Path $TargetDir -Force
 Copy-Item -LiteralPath (Join-Path $inner.FullName '*') -Destination $TargetDir -Recurse -Force
 
-Write-Host "    Node runtime ready: $nodeExe (& $nodeExe -v)" -ForegroundColor Green
+Start-Sleep -Milliseconds 500
+if (-not (Test-Path $nodeExe)) {
+    throw "node.exe missing after extract (antivirus may have blocked it): $nodeExe"
+}
+$verOut = & $nodeExe -v
+Write-Host "    Node runtime ready: $nodeExe ($verOut)" -ForegroundColor Green
 return $TargetDir

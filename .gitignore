@@ -47,6 +47,9 @@ Thumbs.db
 # Packaged releases
 release/
 
+# Node.js Windows zips (downloaded at package build time)
+installer/node-v*-win-x64.zip
+
 
 # Runtime uploads
 backend/uploads/

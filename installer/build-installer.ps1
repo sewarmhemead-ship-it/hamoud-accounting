@@ -11,7 +11,7 @@ $InstallerDir = Join-Path $RepoRoot 'installer'
 $PackageDir = Join-Path $RepoRoot 'release\HamoudAccounting'
 $IssFile = Join-Path $InstallerDir 'HamoudAccounting.iss'
 $OutExe = Join-Path $RepoRoot 'release\HamoudAccounting-Setup.exe'
-$InnoUrl = 'https://github.com/jrsoftware/issrc/releases/download/is-6.7.3/innosetup-6.7.3.exe'
+$InnoUrl = 'https://github.com/jrsoftware/issrc/releases/download/is-6_7_3/innosetup-6.7.3.exe'
 
 function Find-ISCC {
     $candidates = @(
@@ -38,9 +38,10 @@ function Ensure-PackageReady {
         throw "Package folder missing: $PackageDir - run scripts\build-package.ps1"
     }
 
-    Write-Host '==> Bundling portable Node.js 20 LTS into package...' -ForegroundColor Cyan
-    $nodeTarget = Join-Path $PackageDir 'node-runtime'
-    & (Join-Path $InstallerDir 'ensure-node-runtime.ps1') -TargetDir $nodeTarget | Out-Null
+    Write-Host '==> Bundling Node.js 20 LTS zip (extract on install)...' -ForegroundColor Cyan
+    $nodeZip = & (Join-Path $InstallerDir 'ensure-node-zip.ps1') -OutDir $InstallerDir
+    Copy-Item -LiteralPath $nodeZip -Destination (Join-Path $PackageDir (Split-Path $nodeZip -Leaf)) -Force
+    Copy-Item -LiteralPath (Join-Path $InstallerDir 'extract-node-runtime.ps1') -Destination (Join-Path $PackageDir 'extract-node-runtime.ps1') -Force
     & (Join-Path $InstallerDir 'patch-start-prod.ps1') -PackageDir $PackageDir | Out-Null
 }
 
