@@ -20,9 +20,9 @@
 
 ## التثبيت (Windows)
 
-1. فك ضغط الملف `HamoudAccounting-Customer.zip` في مجلد مثل `C:\HamoudAccounting`
-2. تأكد أن **Node.js** مثبت (من https://nodejs.org) — المسار الافتراضي: `C:\Program Files\nodejs\`
-3. شغّل **`start-customer.bat`** من جذر المجلد
+1. شغّل **`HamoudAccounting-Setup.exe`** (مثبت SewarTech) — نقرة مزدوجة فقط، بدون npm أو Node يدوياً
+2. يُثبّت تلقائياً: Node.js 20 المحمول، المكتبات، الواجهة، وقاعدة `customer-ready.db`
+3. من قائمة ابدأ أو سطح المكتب: **حمود — محاسبة تخليص**
 4. يفتح المتصفح على: **http://localhost:3001**
 
 عند **أول تشغيل**، إن لم توجد قاعدة في `backend\data\hamoud.db`، يُنسخ تلقائياً ملف `backend\seed-data\customer-ready.db` إلى `backend\data\hamoud.db`.

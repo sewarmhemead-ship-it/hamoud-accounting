@@ -11,9 +11,10 @@ param(
 
 $ErrorActionPreference = 'Stop'
 
-$ver = $NodeVersion -replace '^v', ''
-$zipName = "node-$ver-win-x64.zip"
+if ($NodeVersion -notmatch '^v') { $NodeVersion = "v$NodeVersion" }
+$zipName = "node-$NodeVersion-win-x64.zip"
 $url = "https://nodejs.org/dist/$NodeVersion/$zipName"
+$ver = $NodeVersion -replace '^v', ''
 $nodeExe = Join-Path $TargetDir 'node.exe'
 
 if (Test-Path $nodeExe) {

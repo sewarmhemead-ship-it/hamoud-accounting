@@ -173,39 +173,19 @@ JWT_EXPIRES_IN=7d
 $utf8NoBom = New-Object System.Text.UTF8Encoding $false
 [System.IO.File]::WriteAllText((Join-Path $BackendDst ".env"), $envContent.Trim(), $utf8NoBom)
 
+Write-Step "Portable Node.js 20 LTS (node-runtime)"
+$ensureNode = Join-Path $RepoRoot "installer\ensure-node-runtime.ps1"
+if (-not (Test-Path $ensureNode)) { throw "Missing $ensureNode" }
+$nodeRuntimeDir = Join-Path $PackageRoot "node-runtime"
+& $ensureNode -TargetDir $nodeRuntimeDir | Out-Null
+
 Write-Step "Launcher scripts (start-prod.bat, start.bat, backup-db.bat)"
-@'
-@echo off
-chcp 65001 >nul
-setlocal
-cd /d "%~dp0"
-
-echo ====================================
-echo   Hamoud - production (customer)
-echo   DB: backend\data\hamoud.db
-echo   برمجة وتطوير — SewarTech
-echo ====================================
-echo.
-
-if not exist "backend\.env" (
-  echo Creating backend\.env from example...
-  copy /Y "backend\.env.example" "backend\.env" >nul
-  echo Set JWT_SECRET in backend\.env before serious use.
-  echo.
-)
-
-echo Starting server http://localhost:3001 ...
-cd backend
-set NODE_ENV=production
-start "Hamoud Server" cmd /k ""C:\Program Files\nodejs\node.exe" server.js"
-
-timeout /t 3 /nobreak >nul
-start http://localhost:3001
-echo.
-echo Ready. UI + API on port 3001.
-echo Login: admin / admin123
-pause
-'@ | Set-Content -LiteralPath (Join-Path $PackageRoot "start-prod.bat") -Encoding ASCII
+$patchStart = Join-Path $RepoRoot "installer\patch-start-prod.ps1"
+if (Test-Path $patchStart) {
+    & $patchStart -PackageDir $PackageRoot | Out-Null
+} else {
+    throw "Missing $patchStart"
+}
 
 @'
 @echo off
@@ -243,18 +223,15 @@ $readmeUtf8 = @'
 
 ## المتطلبات
 
-- **Windows 10/11**
-- **Node.js 20 LTS أو أحدث** في: `C:\Program Files\nodejs\`
-  - ملفات `start-prod.bat` تستخدم `node.exe` من هذا المسار.
-  - إن لم يكن Node مثبتاً: https://nodejs.org
-
-> لا تُرفق نسخة محمولة من Node — يجب تثبيت Node 20+ على الجهاز.
+- **Windows 10/11** فقط — **لا حاجة لتثبيت Node.js يدوياً**
+- الحزمة تتضمن **Node.js 20 LTS** في `node-runtime\`
+- `start-prod.bat` يستخدم `node-runtime\node.exe` أولاً، ثم `C:\Program Files\nodejs\` كاحتياط
 
 ## التثبيت
 
-1. فك الضغط عن المجلد (أو `HamoudAccounting.zip`) إلى مكان ثابت، مثلاً `C:\HamoudAccounting`.
+1. شغّل **`HamoudAccounting-Setup.exe`** (مثبت SewarTech) أو فك ضغط الحزمة إلى مجلد ثابت.
 2. (موصى به) عدّل `JWT_SECRET` في `backend\.env`.
-3. شغّل **start-prod.bat** (أو **start.bat**).
+3. شغّل **start-prod.bat** (أو **start.bat**) أو الاختصار من قائمة ابدأ.
 4. المتصفح: http://localhost:3001
 
 ## تسجيل الدخول
