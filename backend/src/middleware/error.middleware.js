@@ -22,7 +22,12 @@ function errorMiddleware(err, req, res, next) {
     })
   }
 
-  logger.error({ err, url: req.url, method: req.method })
+  logger.error('Unhandled error', {
+    message: err?.message || String(err),
+    stack: err?.stack,
+    url: req.url,
+    method: req.method,
+  })
 
   return res.status(500).json({
     success: false,
