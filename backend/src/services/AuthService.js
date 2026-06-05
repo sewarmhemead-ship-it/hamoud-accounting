@@ -12,7 +12,12 @@ class AuthService {
       throw new UnauthorizedError('اسم المستخدم أو كلمة المرور غير صحيحة')
     }
 
-    const valid = await bcrypt.compare(password, user.password_hash)
+    let valid = false
+    try {
+      valid = await bcrypt.compare(password, user.password_hash || '')
+    } catch {
+      throw new UnauthorizedError('اسم المستخدم أو كلمة المرور غير صحيحة')
+    }
     if (!valid) {
       throw new UnauthorizedError('اسم المستخدم أو كلمة المرور غير صحيحة')
     }
