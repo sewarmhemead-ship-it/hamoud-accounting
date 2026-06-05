@@ -6,35 +6,44 @@ const routes = require('./routes')
 const errorMiddleware = require('./middleware/error.middleware')
 
 const app = express()
+app.set('trust proxy', 1)
 
-const allowedOrigins = process.env.CORS_ORIGINS
+const publicDir = path.join(__dirname, '..', 'public')
+const servesSpa = fs.existsSync(publicDir)
+
+const explicitCorsOrigins = process.env.CORS_ORIGINS
   ? process.env.CORS_ORIGINS.split(',').map((o) => o.trim()).filter(Boolean)
-  : ['http://localhost:5173', 'http://localhost:3001']
+  : null
+
+const devOrigins = ['http://localhost:5173', 'http://localhost:3001']
+
+function hostHeaderName(req) {
+  const raw = req.get('x-forwarded-host') || req.get('host') || ''
+  return String(raw).split(',')[0].trim().split(':')[0]
+}
 
 function isAllowedOrigin(origin, req) {
   if (!origin) return true
   if (process.env.NODE_ENV !== 'production') return true
-  if (allowedOrigins.includes(origin)) return true
 
-  // SPA على نفس الخادم (Railway / إنتاج موحّد): Origin يطابق Host الطلب
-  const host = req.get('host')
-  if (host) {
-    try {
-      if (new URL(origin).host === host) return true
-    } catch {
-      /* origin غير صالح */
-    }
+  const allowList = explicitCorsOrigins || devOrigins
+  if (allowList.includes(origin)) return true
+
+  // إنتاج موحّد (SPA + API): بدون CORS_ORIGINS صريح — اسمح بنفس النشر
+  if (!explicitCorsOrigins && servesSpa) return true
+
+  let originHost = ''
+  try {
+    originHost = new URL(origin).hostname
+  } catch {
+    return false
   }
+
+  // Railway: Host غالباً domain:8080 بينما Origin بدون منفذ
+  if (hostHeaderName(req) === originHost) return true
 
   const railwayDomain = process.env.RAILWAY_PUBLIC_DOMAIN
-  if (railwayDomain) {
-    try {
-      const hostname = new URL(origin).hostname
-      if (hostname === railwayDomain || `${hostname}` === railwayDomain) return true
-    } catch {
-      /* ignore */
-    }
-  }
+  if (railwayDomain && originHost === railwayDomain) return true
 
   return false
 }
@@ -60,9 +69,7 @@ app.get('/.well-known/appspecific/com.chrome.devtools.json', (req, res) => res.j
 app.use('/api', apiCors, routes)
 
 // في الإنتاج: نقدّم واجهة React المبنية (frontend/dist تُنسخ إلى backend/public)
-// من نفس الخادم، فيعمل baseURL النسبي '/api' بلا CORS ولا متغيّرات عنوان.
-const publicDir = path.join(__dirname, '..', 'public')
-if (fs.existsSync(publicDir)) {
+if (servesSpa) {
   app.use(express.static(publicDir))
   app.get('*', (req, res, next) => {
     if (req.path.startsWith('/api')) return next()

@@ -22,6 +22,15 @@ function errorMiddleware(err, req, res, next) {
     })
   }
 
+  if (err.message?.startsWith('CORS:')) {
+    return res.status(403).json({
+      success: false,
+      data: null,
+      message: err.message,
+      code: 'CORS_BLOCKED',
+    })
+  }
+
   logger.error('Unhandled error', {
     message: err?.message || String(err),
     stack: err?.stack,
