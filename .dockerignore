@@ -6,6 +6,8 @@
 # استثناء صريح: لقطة القاعدة الأولية يجب أن تُشحن داخل صورة Docker
 !backend/seed-data/
 !backend/seed-data/initial.db
+!backend/seed-data/customer-ready.db
+!backend/seed-data/centers-master.json
 **/dist
 **/.cache
 **/*.log

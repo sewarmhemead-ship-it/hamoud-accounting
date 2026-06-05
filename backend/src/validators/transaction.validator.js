@@ -13,11 +13,16 @@ const createPaymentSchema = z.object({
   notes: z.string().optional(),
 })
 
-const offsetSchema = z.object({
-  from_center_id: z.number().int().positive(),
-  to_center_id: z.number().int().positive(),
-  amount: z.number().positive(),
-  notes: z.string().optional(),
-})
+const offsetSchema = z
+  .object({
+    from_center_id: z.number().int().positive(),
+    to_center_id: z.number().int().positive(),
+    amount: z.number().positive(),
+    notes: z.string().optional(),
+  })
+  .refine((d) => d.from_center_id !== d.to_center_id, {
+    message: 'لا يمكن المقاصة بين نفس المركز',
+    path: ['to_center_id'],
+  })
 
 module.exports = { createPaymentSchema, offsetSchema }

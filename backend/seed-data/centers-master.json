@@ -1,0 +1,107 @@
+[
+  {
+    "code": "103",
+    "name": "أبو عمر / مخلص باب الهوى",
+    "type": "broker",
+    "currency": "USD",
+    "notes": null
+  },
+  {
+    "code": "105",
+    "name": "منذر / مخلص معبر الراعي",
+    "type": "broker",
+    "currency": "USD",
+    "notes": null
+  },
+  {
+    "code": "111",
+    "name": "صفوك الحمود / مخلص تل أبيض",
+    "type": "broker",
+    "currency": "USD",
+    "notes": null
+  },
+  {
+    "code": "101",
+    "name": "فراس الشهابي",
+    "type": "trader",
+    "currency": "USD",
+    "notes": null
+  },
+  {
+    "code": "102",
+    "name": "عزيز العطالله",
+    "type": "trader",
+    "currency": "USD",
+    "notes": null
+  },
+  {
+    "code": "104",
+    "name": "ياسر الجاسم الحمود",
+    "type": "trader",
+    "currency": "USD",
+    "notes": null
+  },
+  {
+    "code": "106",
+    "name": "سفيان",
+    "type": "trader",
+    "currency": "USD",
+    "notes": null
+  },
+  {
+    "code": "107",
+    "name": "مصطفى الشهابي",
+    "type": "trader",
+    "currency": "USD",
+    "notes": null
+  },
+  {
+    "code": "108",
+    "name": "عبد الكريم العزيز",
+    "type": "trader",
+    "currency": "USD",
+    "notes": null
+  },
+  {
+    "code": "109",
+    "name": "هيثم تونسا",
+    "type": "trader",
+    "currency": "USD",
+    "notes": null
+  },
+  {
+    "code": "110",
+    "name": "حسين إسماعيل",
+    "type": "trader",
+    "currency": "USD",
+    "notes": null
+  },
+  {
+    "code": "112",
+    "name": "شركة قويدر",
+    "type": "trader",
+    "currency": "USD",
+    "notes": null
+  },
+  {
+    "code": "113",
+    "name": "راشد معبدة",
+    "type": "trader",
+    "currency": "USD",
+    "notes": null
+  },
+  {
+    "code": "114",
+    "name": "شركة الأوائل",
+    "type": "trader",
+    "currency": "USD",
+    "notes": null
+  },
+  {
+    "code": "115",
+    "name": "محمد دعبول",
+    "type": "trader",
+    "currency": "USD",
+    "notes": null
+  }
+]

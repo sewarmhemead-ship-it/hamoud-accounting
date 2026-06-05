@@ -12,7 +12,7 @@ const {
 } = require('../engine/clearance')
 const { round2 } = require('../engine/numbers')
 
-const COMPANY_NAME = 'شركة الحمود التجارية للنقل الدولي'
+const SettingsService = require('./SettingsService')
 
 function inRange(dateStr, from, to) {
   if (!dateStr) return true
@@ -114,7 +114,7 @@ class TraderReportService {
       .sort((a, b) => String(a.date).localeCompare(String(b.date)))
 
     return {
-      company: COMPANY_NAME,
+      company: SettingsService.getReportCompanyName(),
       center: { id: center.id, name: center.name, code: center.code, type: center.type },
       range: { from: from || null, to: to || null },
       generated_at: new Date().toISOString(),

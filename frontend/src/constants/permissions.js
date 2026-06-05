@@ -1,0 +1,19 @@
+/** مرآة لـ backend/src/config/permissions.js — للواجهة فقط */
+export const PERM = {
+  SHIPMENTS_VIEW: 'shipments_view',
+  SHIPMENTS_CREATE: 'shipments_create',
+  SHIPMENTS_EDIT: 'shipments_edit',
+  SHIPMENTS_POST: 'shipments_post',
+  SHIPMENTS_DELIVER: 'shipments_deliver',
+  CENTERS_VIEW: 'centers_view',
+  CENTERS_MANAGE: 'centers_manage',
+  PAYMENTS_CREATE: 'payments_create',
+  PAYMENTS_DELETE: 'payments_delete',
+  OFFSET: 'offset',
+  PROFIT_VIEW: 'profit_view',
+  PROFIT_CLOSE: 'profit_close',
+  PROFIT_EDIT_CLOSED: 'profit_edit_closed',
+  INVENTORY_MANAGE: 'inventory_manage',
+  REPORTS_VIEW: 'reports_view',
+  REPORTS_EXPORT: 'reports_export',
+}

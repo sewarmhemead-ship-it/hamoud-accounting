@@ -1,4 +1,5 @@
 const AuthService = require('../services/AuthService')
+const { buildWelcomeSession } = require('../utils/welcomeSession')
 const apiResponse = require('../utils/apiResponse')
 const asyncHandler = require('../utils/asyncHandler')
 
@@ -9,7 +10,12 @@ const authController = {
   }),
 
   me: asyncHandler(async (req, res) => {
-    res.json(apiResponse.success(req.user))
+    res.json(
+      apiResponse.success({
+        ...req.user,
+        welcome: buildWelcomeSession(req.user),
+      })
+    )
   }),
 }
 

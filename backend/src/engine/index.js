@@ -2,7 +2,7 @@
  * محرك الحسابات المالية — نقطة الدخول الموحّدة.
  *
  * كل المنطق المالي الحساس (الترسيم، الضريبة، الرسوم الجمركية، تحويل العملات،
- * الذمم، المربح، الطازج، الطحين، هامش المخلص) معزول هنا كدوال نقيّة (pure)
+ * الذمم، المربح، الطحين، هامش المخلص) معزول هنا كدوال نقيّة (pure)
  * بلا أي اعتماد على قاعدة البيانات أو الشبكة، ليكون قابلاً للاختبار بالكامل.
  *
  * الاختبارات في: backend/tests/*.test.js
@@ -23,6 +23,7 @@ const {
   calculateCostTotal,
   calculatePriceTotal,
   calculateShipmentProfit,
+  resolveTotalCost,
 } = require('./clearance')
 const {
   VALIDATED_FINANCIAL_FIELDS,
@@ -34,7 +35,6 @@ const {
   calculateDailyGrossProfit,
   calculateNetProfit,
 } = require('./dailyProfit')
-const { calculateJuiceProfit } = require('./juice')
 const { calculateFlourTraderLine } = require('./flour')
 const { calculateBrokerMarginFromLines } = require('./broker')
 const {
@@ -68,6 +68,7 @@ module.exports = {
   calculateCostTotal,
   calculatePriceTotal,
   calculateShipmentProfit,
+  resolveTotalCost,
   // validation
   validateShipmentFinancials,
   // currency
@@ -78,8 +79,7 @@ module.exports = {
   // daily profit
   calculateDailyGrossProfit,
   calculateNetProfit,
-  // juice / flour / broker
-  calculateJuiceProfit,
+  // flour / broker
   calculateFlourTraderLine,
   calculateBrokerMarginFromLines,
   // broker clearance statement (كشف المخلص)

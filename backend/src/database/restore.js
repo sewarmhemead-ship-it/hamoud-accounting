@@ -31,7 +31,7 @@ function countCenters(target) {
 }
 
 // يستعيد قاعدة بيانات أولية مُجمَّعة في المستودع إلى DB_PATH عند الإقلاع الأول
-// فقط إذا كانت قاعدة الـ volume فارغة/غير مأهولة. يحمي بيانات العميل الحقيقية:
+// فقط إذا كانت القاعدة المحلية فارغة/غير مأهولة. يحمي بيانات العميل الحقيقية:
 // لا يكتب فوق قاعدة تحتوي مراكز (centers > 0) أبداً.
 //
 // يُحلّل DB_PATH بنفس طريقة التطبيق (config/env.js)، ويفحص المحتوى readonly فقط،
@@ -44,14 +44,20 @@ function restoreIfMissing() {
     const centers = countCenters(target)
 
     if (centers > 0) {
-      console.log(`✅ Volume DB found with ${centers} centers — skipping restore`)
+      console.log(`✅ Local DB found with ${centers} centers — skipping restore`)
       return
     }
 
-    const snapshot = path.join(__dirname, '..', '..', 'seed-data', 'initial.db')
+    const seedDir = path.join(__dirname, '..', '..', 'seed-data')
+    const customerReady = path.join(seedDir, 'customer-ready.db')
+    const legacy = path.join(seedDir, 'initial.db')
+    const snapshot = fs.existsSync(customerReady)
+      ? customerReady
+      : legacy
+
     if (!fs.existsSync(snapshot)) {
       console.warn(
-        `⚠️  no bundled snapshot at ${snapshot} — booting with empty database`
+        `⚠️  no bundled snapshot (customer-ready.db) — booting with empty database`
       )
       return
     }
@@ -61,7 +67,9 @@ function restoreIfMissing() {
       fs.mkdirSync(dir, { recursive: true })
     }
 
-    console.log('🌱 Volume DB empty — restoring seed (7 shipments, 15 centers)')
+    console.log(
+      '🌱 Local DB empty — restoring customer master data (centers, borders — no shipments)'
+    )
     fs.copyFileSync(snapshot, target)
   } catch (err) {
     console.error(`❌ failed to restore initial database to ${target}:`, err)

@@ -4,26 +4,54 @@ const { generateRef } = require('../utils/refGenerator')
 const { REF_PREFIX } = require('../config/constants')
 const apiResponse = require('../utils/apiResponse')
 const asyncHandler = require('../utils/asyncHandler')
+const { normalizeSearchQuery } = require('../utils/searchNormalize')
 
 const transactionController = {
   list: asyncHandler(async (req, res) => {
-    const { center_id, limit = 50, offset = 0 } = req.query
+    const {
+      center_id,
+      type,
+      category,
+      search,
+      from,
+      to,
+      is_delivered,
+      shipment_id,
+      limit = 50,
+      offset = 0,
+    } = req.query
 
-    if (center_id) {
-      const result = TransactionModel.findByCenter(parseInt(center_id, 10), {
-        limit: parseInt(limit, 10),
-        offset: parseInt(offset, 10),
-      })
-      return res.json(
-        apiResponse.paginated(result.rows, result.total, parseInt(limit, 10), parseInt(offset, 10))
-      )
+    const filters = {}
+    if (center_id) filters.center_id = parseInt(center_id, 10)
+    if (type) filters.type = type
+    if (category) filters.category = category
+    if (search?.trim()) filters.search = normalizeSearchQuery(search)
+    if (from) filters.from = from
+    if (to) filters.to = to
+    if (is_delivered === '0' || is_delivered === '1') {
+      filters.is_delivered = is_delivered === '1'
     }
+    if (shipment_id) filters.shipment_id = parseInt(shipment_id, 10)
 
-    const result = TransactionModel.findAll({
-      limit: parseInt(limit, 10),
-      offset: parseInt(offset, 10),
+    const lim = parseInt(limit, 10)
+    const off = parseInt(offset, 10)
+    const result = TransactionModel.listWithDetails({ filters, limit: lim, offset: off })
+    res.json({
+      success: true,
+      data: result.rows,
+      message: null,
+      meta: {
+        total: result.total,
+        limit: result.limit,
+        offset: result.offset,
+        page: Math.floor(result.offset / result.limit) + 1,
+        totalPages: Math.ceil(result.total / result.limit) || 1,
+        hasMore: result.offset + result.limit < result.total,
+        total_out: result.total_out,
+        total_in: result.total_in,
+        net: result.total_out - result.total_in,
+      },
     })
-    res.json(apiResponse.paginated(result.rows, result.total, result.limit, result.offset))
   }),
 
   getById: asyncHandler(async (req, res) => {

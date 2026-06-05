@@ -186,6 +186,39 @@ function calculateShipmentProfit(shipment) {
   return round2(calculatePriceTotal(shipment) - calculateCostTotal(shipment))
 }
 
+/**
+ * مصدر الحقيقة الوحيد لتحديد مجموع السيارة.
+ *
+ * إذا وُجدت أعمدة مزدوجة (cost_* أو price_*) → الكشف المزدوج:
+ *   traderAmount   = فاتورة التاجر (price_*) — ما نأخذه
+ *   clearanceAmount = تكلفة المخلص (cost_*) — ما ندفعه
+ *
+ * وإلا → الكشف الكلاسيكي:
+ *   كلاهما = مجموع الأقلام العادية (totalCost)
+ *
+ * @param {object} shipment
+ * @returns {{ traderAmount:number, clearanceAmount:number, isDual:boolean }}
+ */
+function resolveTotalCost(shipment) {
+  const priceTotal = calculatePriceTotal(shipment)
+  const costTotal  = calculateCostTotal(shipment)
+
+  if (priceTotal > 0 || costTotal > 0) {
+    return {
+      traderAmount:    priceTotal,
+      clearanceAmount: costTotal,
+      isDual:          true,
+    }
+  }
+
+  const legacy = calculateShipmentTotal(shipment)
+  return {
+    traderAmount:    legacy,
+    clearanceAmount: legacy,
+    isDual:          false,
+  }
+}
+
 module.exports = {
   CLEARANCE_COST_FIELDS,
   CUSTOMS_RATE_PER_KG,
@@ -200,4 +233,5 @@ module.exports = {
   calculateCostTotal,
   calculatePriceTotal,
   calculateShipmentProfit,
+  resolveTotalCost,
 }

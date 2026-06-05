@@ -1,12 +1,13 @@
 @echo off
 chcp 65001 >nul
 echo ====================================
-echo   تشغيل نظام حمود للمحاسبة
+echo   حمود — تطوير (محلي)
+echo   DB: backend\data\hamoud.db
 echo ====================================
 echo.
 
 echo [1/2] تشغيل الـ Backend (المنفذ 3001)...
-start "Hamoud Backend" cmd /k "cd /d "%~dp0backend" && npm run dev"
+start "Hamoud Backend" cmd /k "cd /d "%~dp0backend" && "C:\Program Files\nodejs\node.exe" server.js"
 
 timeout /t 3 /nobreak >nul
 

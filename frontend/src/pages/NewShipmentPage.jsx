@@ -2,41 +2,11 @@ import { useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useQuery, useMutation } from '@tanstack/react-query'
 import { centersApi, reportsApi, shipmentsApi, calculationsApi } from '../api'
-import { todayISO, formatCurrency } from '../utils/format'
+import { todayISO, formatCurrency, parseNum } from '../utils/format'
+import { DUAL_COST_FIELDS, DUAL_PRICE_FIELDS, DUAL_COST_TO_PRICE } from '../constants'
 import { useUiStore } from '../store/auth.store'
 
-const COST_FIELDS = [
-  ['cost_tarseem', 'الترسيم'],
-  ['cost_turkish_driver', 'سائق / نقل تركي'],
-  ['cost_clearance_fee', 'تخليص'],
-  ['cost_workers', 'عمال قلب'],
-  ['cost_service_fee', 'خدمات المعبر'],
-  ['cost_door_receipt', 'وصل دور'],
-  ['cost_other', 'مصاريف أخرى'],
-]
-
-const PRICE_FIELDS = [
-  ['price_tarseem', 'الترسيم'],
-  ['price_syrian_driver', 'السائق السوري'],
-  ['price_clearance_fee', 'تخليص'],
-  ['price_workers', 'عمال قلب'],
-  ['price_service_fee', 'خدمات أخرى'],
-  ['price_door_receipt', 'وصل دور'],
-  ['price_other', 'مصاريف أخرى'],
-]
-
-// نسخ التكلفة ← الفاتورة (تطابق الأقلام المتناظرة)
-const COST_TO_PRICE = {
-  cost_tarseem: 'price_tarseem',
-  cost_turkish_driver: 'price_syrian_driver',
-  cost_clearance_fee: 'price_clearance_fee',
-  cost_workers: 'price_workers',
-  cost_service_fee: 'price_service_fee',
-  cost_door_receipt: 'price_door_receipt',
-  cost_other: 'price_other',
-}
-
-const FINANCIAL_KEYS = [...COST_FIELDS, ...PRICE_FIELDS].map(([k]) => k)
+const FINANCIAL_KEYS = [...DUAL_COST_FIELDS, ...DUAL_PRICE_FIELDS].map(([k]) => k)
 
 const emptyForm = () => ({
   center_id: '',
@@ -54,7 +24,7 @@ const emptyForm = () => ({
   ...Object.fromEntries(FINANCIAL_KEYS.map((k) => [k, ''])),
 })
 
-const n = (v) => parseFloat(v) || 0
+const n = parseNum
 const numOrUndef = (v) => (v === '' || v === undefined || v === null ? undefined : parseFloat(v))
 
 export default function NewShipmentPage() {
@@ -112,8 +82,8 @@ export default function NewShipmentPage() {
 
   // حسابات حيّة
   const calc = useMemo(() => {
-    const costTotal = COST_FIELDS.reduce((a, [k]) => a + n(form[k]), 0)
-    const priceTotal = PRICE_FIELDS.reduce((a, [k]) => a + n(form[k]), 0)
+    const costTotal = DUAL_COST_FIELDS.reduce((a, [k]) => a + n(form[k]), 0)
+    const priceTotal = DUAL_PRICE_FIELDS.reduce((a, [k]) => a + n(form[k]), 0)
     const profit = priceTotal - costTotal
     const marginPct = costTotal > 0 ? (profit / costTotal) * 100 : 0
     return {
@@ -136,7 +106,7 @@ export default function NewShipmentPage() {
   const copyCostToPrice = () => {
     setForm((f) => {
       const next = { ...f }
-      for (const [costKey, priceKey] of Object.entries(COST_TO_PRICE)) {
+      for (const [costKey, priceKey] of Object.entries(DUAL_COST_TO_PRICE)) {
         if (f[costKey] !== '' && f[costKey] !== undefined) next[priceKey] = f[costKey]
       }
       return next
@@ -148,7 +118,7 @@ export default function NewShipmentPage() {
     setForm((f) => {
       const next = { ...f }
       let costSum = 0
-      for (const [costKey, priceKey] of Object.entries(COST_TO_PRICE)) {
+      for (const [costKey, priceKey] of Object.entries(DUAL_COST_TO_PRICE)) {
         const v = n(f[costKey])
         costSum += v
         next[priceKey] = f[costKey] === '' ? '' : v
@@ -333,7 +303,7 @@ export default function NewShipmentPage() {
           <div className="card space-y-4">
             <h3 className="font-medium text-danger">ما ندفعه للمخلص (التكلفة)</h3>
             <div className="grid grid-cols-2 gap-3">
-              {COST_FIELDS.map(([key, label]) => (
+              {DUAL_COST_FIELDS.map(([key, label]) => (
                 <div key={key}>
                   <label className="label">{label}</label>
                   <input type="number" step="0.01" min="0" value={form[key]} onChange={(e) => set(key, e.target.value)} placeholder="0" />
@@ -365,7 +335,7 @@ export default function NewShipmentPage() {
               <button type="button" onClick={applyMargin} className="btn-secondary !py-1 !px-3 text-xs">تطبيق</button>
             </div>
             <div className="grid grid-cols-2 gap-3">
-              {PRICE_FIELDS.map(([key, label]) => (
+              {DUAL_PRICE_FIELDS.map(([key, label]) => (
                 <div key={key}>
                   <label className="label">{label}</label>
                   <input type="number" step="0.01" min="0" value={form[key]} onChange={(e) => set(key, e.target.value)} placeholder="0" />

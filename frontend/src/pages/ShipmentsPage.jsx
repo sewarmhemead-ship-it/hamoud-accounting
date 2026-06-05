@@ -1,95 +1,156 @@
-import { useState } from 'react'
+import { useState, useCallback, useEffect } from 'react'
 import { useQuery } from '@tanstack/react-query'
-import { Link } from 'react-router-dom'
+import { Link, useSearchParams } from 'react-router-dom'
 import { shipmentsApi } from '../api'
 import StatusBadge from '../components/StatusBadge'
+import ShipmentsListFilterBar from '../components/ShipmentsListFilterBar'
+import { useDebouncedValue } from '../hooks/useDebouncedValue'
+import { buildShipmentsListParams } from '../utils/listFilters'
+import { normalizeSearchQuery } from '../utils/searchNormalize'
 import { formatCurrency, formatDate } from '../utils/format'
 
-const STATUS_FILTERS = [
-  { value: '', label: 'الكل' },
-  { value: 'pending', label: 'معلقة' },
-  { value: 'complete', label: 'مكتملة' },
-  { value: 'posted', label: 'مرحّلة' },
-  { value: 'delivered', label: 'مُسلَّمة' },
-]
+const PAGE_SIZE = 30
 
 export default function ShipmentsPage() {
-  const [status, setStatus] = useState('')
+  const [params, setSearchParams] = useSearchParams()
+  const [status, setStatus]   = useState(() => params.get('status') || '')
+  const [search, setSearch]   = useState(() => params.get('search') || '')
+  const [from,   setFrom]     = useState(() => params.get('from') || '')
+  const [to,     setTo]       = useState(() => params.get('to') || '')
+  const [page,   setPage]     = useState(0)
+  const debouncedRaw = useDebouncedValue(search, 350)
+  const debouncedSearch = normalizeSearchQuery(debouncedRaw)
 
-  const { data, isLoading } = useQuery({
-    queryKey: ['shipments', status],
-    queryFn: () => shipmentsApi.list({ status: status || undefined, limit: 100 }),
+  // إعادة الصفحة للأول عند تغيير أي فلتر
+  const setStatusP  = useCallback((v) => { setStatus(v);  setPage(0) }, [])
+  const setSearchP  = useCallback((v) => { setSearch(v);  setPage(0) }, [])
+  const setFromP    = useCallback((v) => { setFrom(v);    setPage(0) }, [])
+  const setToP      = useCallback((v) => { setTo(v);      setPage(0) }, [])
+
+  useEffect(() => {
+    const p = new URLSearchParams()
+    if (status) p.set('status', status)
+    if (debouncedSearch) p.set('search', debouncedSearch)
+    if (from) p.set('from', from)
+    if (to) p.set('to', to)
+    const next = p.toString()
+    if (next !== params.toString()) {
+      setSearchParams(p, { replace: true })
+    }
+  }, [status, debouncedSearch, from, to, setSearchParams])
+
+  const { data, isLoading, isFetching } = useQuery({
+    queryKey: ['shipments-list', status, debouncedSearch, from, to, page],
+    queryFn: () =>
+      shipmentsApi.list(
+        buildShipmentsListParams({
+          status,
+          search: debouncedSearch,
+          from,
+          to,
+          limit: PAGE_SIZE,
+          offset: page * PAGE_SIZE,
+        })
+      ),
   })
 
-  const shipments = data?.data || []
+  const shipments = data?.data  || []
+  const total     = data?.meta?.total ?? 0
+  const pages     = Math.ceil(total / PAGE_SIZE)
+  const hasActive = !!(status || debouncedSearch || from || to)
+  const searchPending = normalizeSearchQuery(search) !== debouncedSearch
+  const listBusy = isLoading || isFetching || searchPending
+
+  const clearFilters = () => { setStatus(''); setSearch(''); setFrom(''); setTo(''); setPage(0) }
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4">
+      {/* رأس الصفحة */}
       <div className="flex items-center justify-between flex-wrap gap-3">
-        <h2 className="text-xl font-bold text-white">السيارات</h2>
-        <Link to="/shipments/new" className="btn-primary">
-          + تخليص جديد
-        </Link>
+        <div>
+          <h2 className="text-xl font-bold text-ink">السيارات</h2>
+          {total > 0 && (
+            <p className="text-xs text-ink-faint mt-0.5">
+              {total} سيارة{hasActive ? ' (فلترة نشطة)' : ''}
+            </p>
+          )}
+        </div>
+        <Link to="/shipments/new" className="btn-primary">+ تخليص جديد</Link>
       </div>
 
-      <div className="flex gap-2 flex-wrap">
-        {STATUS_FILTERS.map((f) => (
-          <button
-            key={f.value}
-            type="button"
-            onClick={() => setStatus(f.value)}
-            className={`px-3 py-1.5 rounded-lg text-sm transition-colors ${
-              status === f.value
-                ? 'bg-accent-muted text-accent'
-                : 'bg-surface-card text-gray-400 hover:text-gray-200'
-            }`}
-          >
-            {f.label}
-          </button>
-        ))}
-      </div>
+      <ShipmentsListFilterBar
+        search={search}
+        onSearchChange={setSearchP}
+        status={status}
+        onStatusChange={setStatusP}
+        from={from}
+        onFromChange={setFromP}
+        to={to}
+        onToChange={setToP}
+        onClear={clearFilters}
+        busy={listBusy}
+      />
 
-      {isLoading ? (
-        <p className="text-gray-500">جاري التحميل...</p>
+      {/* الجدول */}
+      {listBusy && shipments.length === 0 ? (
+        <div className="card text-center py-12 text-ink-faint">جاري البحث...</div>
       ) : (
-        <div className="card overflow-x-auto">
+        <div className={`card overflow-x-auto !p-0 transition-opacity ${listBusy ? 'opacity-60 pointer-events-none' : ''}`}>
           <table className="w-full text-sm">
             <thead>
-              <tr className="text-gray-500 border-b border-surface-border">
-                <th className="text-right py-3 px-2">الرقم</th>
-                <th className="text-right py-3 px-2">التاجر</th>
-                <th className="text-right py-3 px-2">البضاعة</th>
-                <th className="text-right py-3 px-2">المسار</th>
-                <th className="text-right py-3 px-2">الدخول</th>
-                <th className="text-right py-3 px-2">المجموع</th>
-                <th className="text-right py-3 px-2">الحالة</th>
+              <tr style={{ borderBottom: '1px solid rgba(255,255,255,0.06)' }}>
+                {['الرقم', 'التاجر', 'المخلص', 'البضاعة', 'المسار', 'الدخول', 'المجموع', 'الحالة'].map((h) => (
+                  <th key={h} className="text-right py-3 px-3 text-xs text-ink-faint font-medium">{h}</th>
+                ))}
               </tr>
             </thead>
             <tbody>
-              {shipments.map((s) => (
-                <tr key={s.id} className="border-b border-surface-border/50 hover:bg-surface-hover">
-                  <td className="py-3 px-2">
-                    <Link to={`/shipments/${s.id}`} className="text-accent hover:underline">
+              {shipments.length === 0 ? (
+                <tr>
+                  <td colSpan={8} className="py-12 text-center text-ink-faint text-sm">
+                    {hasActive ? 'لا توجد نتائج للبحث الحالي' : 'لا توجد سيارات'}
+                  </td>
+                </tr>
+              ) : shipments.map((s) => (
+                <tr key={s.id} style={{ borderBottom: '1px solid rgba(255,255,255,0.03)' }}
+                    className="hover:bg-white/[0.025] transition-colors">
+                  <td className="py-2.5 px-3">
+                    <Link to={`/shipments/${s.id}`} className="text-accent hover:text-accent-hover font-mono text-xs">
                       {s.ref_number}
                     </Link>
                   </td>
-                  <td className="py-3 px-2 text-gray-300">{s.center_name}</td>
-                  <td className="py-3 px-2 text-gray-300">{s.goods_name || '—'}</td>
-                  <td className="py-3 px-2 text-gray-500 text-xs">
-                    {s.source} → {s.destination}
+                  <td className="py-2.5 px-3 text-ink text-xs">{s.center_name}</td>
+                  <td className="py-2.5 px-3 text-ink-soft text-xs">{s.broker_name || '—'}</td>
+                  <td className="py-2.5 px-3 text-ink-soft text-xs max-w-[120px] truncate">{s.goods_name || '—'}</td>
+                  <td className="py-2.5 px-3 text-ink-faint text-xs whitespace-nowrap">
+                    {[s.source, s.destination].filter((p) => p && !/^[?\s]+$/.test(String(p))).join(' → ') || '—'}
                   </td>
-                  <td className="py-3 px-2 text-gray-400">{formatDate(s.entry_date)}</td>
-                  <td className="py-3 px-2 text-gray-200">{formatCurrency(s.total_cost || 0)}</td>
-                  <td className="py-3 px-2">
-                    <StatusBadge status={s.status} />
-                  </td>
+                  <td className="py-2.5 px-3 text-ink-faint text-xs whitespace-nowrap">{formatDate(s.entry_date)}</td>
+                  <td className="py-2.5 px-3 text-ink font-medium text-xs tabular-nums">{formatCurrency(s.total_cost || 0)}</td>
+                  <td className="py-2.5 px-3"><StatusBadge status={s.status} /></td>
                 </tr>
               ))}
             </tbody>
           </table>
-          {shipments.length === 0 && (
-            <p className="text-center text-gray-500 py-8">لا توجد سيارات</p>
-          )}
+        </div>
+      )}
+
+      {/* pagination */}
+      {pages > 1 && (
+        <div className="flex items-center justify-between text-sm">
+          <span className="text-ink-faint text-xs">
+            صفحة {page + 1} من {pages} · {total} سيارة
+          </span>
+          <div className="flex gap-1.5">
+            <button type="button" className="btn-secondary !py-1 !px-3 text-xs"
+              disabled={page === 0} onClick={() => setPage(0)}>«</button>
+            <button type="button" className="btn-secondary !py-1 !px-3 text-xs"
+              disabled={page === 0} onClick={() => setPage(page - 1)}>‹ السابق</button>
+            <button type="button" className="btn-secondary !py-1 !px-3 text-xs"
+              disabled={page + 1 >= pages} onClick={() => setPage(page + 1)}>التالي ›</button>
+            <button type="button" className="btn-secondary !py-1 !px-3 text-xs"
+              disabled={page + 1 >= pages} onClick={() => setPage(pages - 1)}>»</button>
+          </div>
         </div>
       )}
     </div>

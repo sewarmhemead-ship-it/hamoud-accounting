@@ -174,4 +174,239 @@ async function htmlToPdf(html) {
   }
 }
 
-module.exports = { traderHtml, profitHtml, htmlToPdf }
+const STATUS_LABELS = {
+  pending: 'معلقة',
+  complete: 'مكتملة',
+  posted: 'مرحّلة',
+  delivered: 'مُسلّمة',
+}
+
+function periodHtml(data) {
+  const profitRows = data.profit.days
+    .map(
+      (d) =>
+        `<tr><td>${fmtDate(d.date)}</td><td>${d.num_trucks}</td><td class="num">${money(d.gross_profit)}</td><td class="num">${money(d.office_expenses)}</td><td class="num">${money(d.net_profit)}</td></tr>`
+    )
+    .join('')
+
+  const statusRows = Object.entries(data.shipments.by_status)
+    .map(
+      ([st, v]) =>
+        `<tr><td>${STATUS_LABELS[st] || st}</td><td>${v.count}</td><td class="num">${money(v.total)}</td></tr>`
+    )
+    .join('')
+
+  const shipRows = data.shipments.rows
+    .slice(0, 80)
+    .map(
+      (s) =>
+        `<tr><td>${fmtDate(s.entry_date)}</td><td>${esc(s.ref_number)}</td><td>${esc(s.center_name)}</td><td>${esc(s.goods_name)}</td><td>${STATUS_LABELS[s.status] || s.status}</td><td class="num">${money(s.total_cost)}</td></tr>`
+    )
+    .join('')
+
+  const body = `
+  <p class="section">ملخص الأيام المُغلقة (حسب تاريخ الإغلاق في daily_profit)</p>
+  <table>
+    <tr><th>التاريخ</th><th>سيارات</th><th>إيراد</th><th>مصاريف مكتب</th><th>صافي</th></tr>
+    ${profitRows || '<tr><td colspan="5">لا أيام مُغلقة في هذه الفترة</td></tr>'}
+    <tr class="tot"><td>المجموع</td><td>${data.profit.totals.num_trucks}</td><td class="num">${money(data.profit.totals.gross_profit)}</td><td class="num">${money(data.profit.totals.office_expenses)}</td><td class="num">${money(data.profit.totals.net_profit)}</td></tr>
+  </table>
+  <p class="section">الشحنات حسب تاريخ الدخول (entry_date)</p>
+  <table><tr><th>الحالة</th><th>العدد</th><th>القيمة</th></tr>${statusRows}</table>
+  <table>
+    <tr><th>تاريخ</th><th>رقم</th><th>تاجر</th><th>بضاعة</th><th>حالة</th><th>مجموع</th></tr>
+    ${shipRows || '<tr><td colspan="6">لا شحنات</td></tr>'}
+  </table>
+  ${data.shipments.rows.length > 80 ? '<p class="meta">عرض أول 80 سيارة — التفاصيل الكاملة في Excel</p>' : ''}`
+
+  return shell(data, 'تقرير الفترة المحاسبي', body)
+}
+
+function dailyProfitHtml(data) {
+  const w = data.waterfall
+  const diffRows = Object.entries(data.diff_labels || {})
+    .map(
+      ([k, label]) =>
+        `<tr><td>${esc(label)}</td><td class="num">${money(w.diffs[k] || 0)}</td></tr>`
+    )
+    .join('')
+
+  const moveRows = (data.movements || [])
+    .map(
+      (m) =>
+        `<tr><td>${esc(m.ref_number)}</td><td>${esc(m.trader_name)}</td><td>${esc(m.goods_name)}</td><td>${fmtDate(m.posted_at)}</td><td class="num">${money(m.clearance_amount)}</td></tr>`
+    )
+    .join('')
+
+  const payRows = (data.payments || [])
+    .map(
+      (p) =>
+        `<tr><td>${fmtDate(p.date)}</td><td>${esc(p.center_name)}</td><td class="num">${money(p.amount_usd)}</td><td>${esc(p.category)}</td></tr>`
+    )
+    .join('')
+
+  const expenseBlock = (title, lines, extraCol) => {
+    if (!lines?.length) return ''
+    const rows = lines
+      .map((l) => {
+        const extra = extraCol ? `<td>${esc(extraCol(l))}</td>` : ''
+        return `<tr><td>${esc(l.label)}</td>${extra}<td class="num">${money(l.amount)}</td></tr>`
+      })
+      .join('')
+    const headExtra = extraCol ? '<th>تصنيف</th>' : ''
+    return `<p class="section">${title}</p><table><tr><th>البند</th>${headExtra}<th>المبلغ</th></tr>${rows}</table>`
+  }
+
+  const body = `
+  <p class="section">الميزانية — ${esc(data.date)} ${data.is_closed ? '(مُغلق)' : '(معاينة)'}</p>
+  <table>
+    <tr><th>البند</th><th>المبلغ</th></tr>
+    <tr><td>تخليص الشركة (أساس)</td><td class="num">${money(w.base_clearance)}</td></tr>
+    ${diffRows}
+    <tr class="tot"><td>إجمالي اليوم</td><td class="num">${money(w.gross_profit)}</td></tr>
+    <tr><td>مصاريف مكتب</td><td class="num">${money(w.office_expenses)}</td></tr>
+    <tr><td>مصاريف منزل</td><td class="num">${money(w.home_expenses)}</td></tr>
+    <tr class="tot"><td>صافي اليوم</td><td class="num">${money(w.net_profit)}</td></tr>
+  </table>
+  ${expenseBlock('تفصيل مكتب', data.expenses?.office)}
+  ${expenseBlock('تفصيل تشغيلية', data.expenses?.operations)}
+  ${expenseBlock('تفصيل متفرقة', data.expenses?.misc, (l) => (l.bucket === 'home' ? 'منزل' : 'مكتب'))}
+  ${expenseBlock('تفصيل منزل', data.expenses?.home)}
+  <p class="section">السيارات المرحّلة (${data.movements?.length || 0}) — إجمالي ${money(data.movements_total)}</p>
+  <table>
+    <tr><th>رقم</th><th>تاجر</th><th>بضاعة</th><th>ترحيل</th><th>إيراد</th></tr>
+    ${moveRows || '<tr><td colspan="5">لا سيارات مرحّلة في هذا اليوم</td></tr>'}
+  </table>
+  <p class="section">الدفعات النقدية — إجمالي ${money(data.payments_total)}</p>
+  <table>
+    <tr><th>تاريخ</th><th>مركز</th><th>مبلغ</th><th>فئة</th></tr>
+    ${payRows || '<tr><td colspan="4">لا دفعات</td></tr>'}
+  </table>`
+
+  return shell(
+    { company: data.company, range: { from: data.date, to: data.date }, generated_at: data.generated_at },
+    'تقرير المربح اليومي',
+    body
+  )
+}
+
+function monthlyProfitHtml(data) {
+  const prefix = data.month_prefix || `${data.year}-${String(data.month).padStart(2, '0')}`
+  const dayRows = (data.days || [])
+    .map(
+      (d) =>
+        `<tr><td>${fmtDate(d.date)}</td><td class="num">${d.num_trucks}</td><td class="num">${money(d.gross_profit)}</td><td class="num">${money(d.office_expenses)}</td><td class="num">${money(d.home_expenses)}</td><td class="num">${money(d.net_profit)}</td></tr>`
+    )
+    .join('')
+
+  const best = data.best_day
+    ? `<p class="meta">أفضل يوم: ${fmtDate(data.best_day.date)} — صافي ${money(data.best_day.net_profit)}</p>`
+    : ''
+  const worst = data.worst_day
+    ? `<p class="meta">أضعف يوم: ${fmtDate(data.worst_day.date)} — صافي ${money(data.worst_day.net_profit)}</p>`
+    : ''
+
+  const body = `
+  <p class="section">ملخص الشهر — ${esc(prefix)}</p>
+  <p class="meta">${data.days_count || 0} يوماً مُغلقاً · ${data.num_trucks || 0} سيارة · متوسط صافي/يوم ${money(data.avg_net)}</p>
+  <table>
+    <tr><th>التاريخ</th><th>سيارات</th><th>إجمالي</th><th>مكتب</th><th>منزل</th><th>صافي</th></tr>
+    ${dayRows || '<tr><td colspan="6">لا أيام مُغلقة في هذا الشهر</td></tr>'}
+    <tr class="tot"><td>المجموع</td><td class="num">${data.num_trucks || 0}</td><td class="num">${money(data.gross_profit)}</td><td class="num">${money(data.office_expenses)}</td><td class="num">${money(data.home_expenses)}</td><td class="num">${money(data.net_profit)}</td></tr>
+  </table>
+  ${best}
+  ${worst}`
+
+  return shell(
+    {
+      company: data.company,
+      range: { from: `${prefix}-01`, to: `${prefix}-31` },
+      generated_at: data.generated_at,
+    },
+    'تقرير المربح الشهري',
+    body
+  )
+}
+
+function inventoryHtml(data) {
+  const catLabels = data.category_labels || {}
+  const rows = (data.rows || [])
+    .map(
+      (r) =>
+        `<tr><td>${esc(r.center_code)}</td><td>${esc(r.center_name)}</td><td>${esc(catLabels[r.category] || r.category)}</td><td class="num">${money(r.balance)}</td><td class="num">${money(r.posted_undelivered)}</td><td class="num">${money(r.wip_value)}</td><td class="num">${money(r.total)}</td></tr>`
+    )
+    .join('')
+  const t = data.totals || {}
+  const byCat = Object.entries(t.by_category || {})
+    .map(
+      ([cat, sum]) =>
+        `<tr><td>${esc(catLabels[cat] || cat)}</td><td class="num">${money(sum)}</td></tr>`
+    )
+    .join('')
+
+  const changed = (data.compare?.diffs || []).filter((d) => d.status === 'changed')
+  const cmpRows = changed
+    .slice(0, 40)
+    .map(
+      (d) =>
+        `<tr><td>${esc(d.center_name)}</td><td class="num">${money(d.snapshot_total)}</td><td class="num">${money(d.live_total)}</td><td class="num">${money(d.delta_total)}</td></tr>`
+    )
+    .join('')
+
+  const mode = data.is_live ? 'معاينة حية' : 'لقطة محفوظة'
+  const body = `
+  <p class="section">جرد الذمم — ${esc(data.snapshot_date)} (${mode})</p>
+  <p class="meta">${esc(data.label || '')} · WIP لا يدخل الإجمالي · الذمة = رصيد + جارية (محرك balance)</p>
+  <table>
+    <tr><th>كود</th><th>مركز</th><th>تصنيف</th><th>رصيد</th><th>جارية</th><th>WIP</th><th>ذمة</th></tr>
+    ${rows || '<tr><td colspan="7">لا بيانات</td></tr>'}
+    <tr class="tot"><td colspan="3">المجموع (${t.centers || 0} مركز)</td><td class="num">${money(t.balance)}</td><td class="num">${money(t.posted_undelivered)}</td><td class="num">${money(t.wip_value)}</td><td class="num">${money(t.total)}</td></tr>
+  </table>
+  ${byCat ? `<p class="section">ملخص التصنيف</p><table><tr><th>تصنيف</th><th>ذمة</th></tr>${byCat}</table>` : ''}
+  ${changed.length ? `<p class="section">مقارنة مع الوضع الحي (${data.compare.changed_count} تغيّر)</p><table><tr><th>مركز</th><th>محفوظ</th><th>حي</th><th>فرق</th></tr>${cmpRows}</table>` : ''}
+  ${changed.length > 40 ? '<p class="meta">عرض أول 40 تغيّر — التفاصيل الكاملة في Excel</p>' : ''}`
+
+  return shell(
+    { company: data.company, range: { from: data.snapshot_date, to: data.snapshot_date }, generated_at: data.generated_at },
+    'تقرير الجرد',
+    body
+  )
+}
+
+function inventoryRangeHtml(data) {
+  const dayRows = (data.days || [])
+    .map(
+      (d) =>
+        `<tr><td>${fmtDate(d.date)}</td><td>${esc(d.label || '')}</td><td>${d.centers_count}</td><td class="num">${money(d.balance)}</td><td class="num">${money(d.posted_undelivered)}</td><td class="num">${money(d.wip_value)}</td><td class="num">${money(d.total)}</td></tr>`
+    )
+    .join('')
+  const dl = data.delta_first_last
+  const deltaBlock = dl
+    ? `<p class="meta">فرق أول يوم → آخر يوم: الذمة ${money(dl.delta_total)} (رصيد ${money(dl.delta_balance)}, جارية ${money(dl.delta_posted)})</p>`
+    : ''
+  const body = `
+  <p class="section">جرد الفترة — من ${esc(data.from)} إلى ${esc(data.to)}</p>
+  <p class="meta">${data.days_count} يوماً فيه لقطة محفوظة · الأيام بلا لقطة لا تظهر</p>
+  ${deltaBlock}
+  <table>
+    <tr><th>تاريخ</th><th>تسمية</th><th>مراكز</th><th>رصيد</th><th>جارية</th><th>WIP</th><th>ذمة</th></tr>
+    ${dayRows || '<tr><td colspan="7">لا لقطات في هذه الفترة</td></tr>'}
+  </table>
+  <p class="meta">التفاصيل الكاملة لكل مركز/يوم في ملف Excel</p>`
+  return shell(
+    { company: data.company, range: { from: data.from, to: data.to }, generated_at: data.generated_at },
+    'تقرير جرد الفترة',
+    body
+  )
+}
+
+module.exports = {
+  traderHtml,
+  profitHtml,
+  periodHtml,
+  dailyProfitHtml,
+  monthlyProfitHtml,
+  inventoryHtml,
+  inventoryRangeHtml,
+  htmlToPdf,
+}

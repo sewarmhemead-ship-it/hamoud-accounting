@@ -5,6 +5,20 @@ const { DB_PATH, NODE_ENV } = require('./env')
 
 let db = null
 
+function setDatabase(instance) {
+  if (db && db !== instance) {
+    try { db.close() } catch { /* ignore */ }
+  }
+  db = instance
+}
+
+function resetDatabase() {
+  if (db) {
+    try { db.close() } catch { /* ignore */ }
+    db = null
+  }
+}
+
 function getDatabase() {
   if (!db) {
     const resolved = path.resolve(DB_PATH)
@@ -25,4 +39,4 @@ function getDatabase() {
   return db
 }
 
-module.exports = { getDatabase }
+module.exports = { getDatabase, setDatabase, resetDatabase }

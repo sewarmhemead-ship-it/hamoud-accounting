@@ -1,14 +1,19 @@
 const ShipmentService = require('../services/ShipmentService')
+const ShipmentModel = require('../models/ShipmentModel')
 const apiResponse = require('../utils/apiResponse')
 const asyncHandler = require('../utils/asyncHandler')
+const { normalizeSearchQuery } = require('../utils/searchNormalize')
 
 const shipmentController = {
   list: asyncHandler(async (req, res) => {
-    const { center_id, status, clearance_center_id, limit = 50, offset = 0 } = req.query
+    const { center_id, status, clearance_center_id, search, from, to, limit = 50, offset = 0 } = req.query
     const filters = {}
-    if (center_id) filters.center_id = parseInt(center_id, 10)
-    if (status) filters.status = status
-    if (clearance_center_id) filters.clearance_center_id = parseInt(clearance_center_id, 10)
+    if (center_id)            filters.center_id = parseInt(center_id, 10)
+    if (status)               filters.status = status
+    if (clearance_center_id)  filters.clearance_center_id = parseInt(clearance_center_id, 10)
+    if (search?.trim())       filters.search = normalizeSearchQuery(search)
+    if (from)                 filters.from = from
+    if (to)                   filters.to = to
 
     const result = ShipmentService.list({
       ...filters,
@@ -65,6 +70,16 @@ const shipmentController = {
       offset: parseInt(offset, 10),
     })
     res.json(apiResponse.paginated(result.rows, result.total, result.limit, result.offset))
+  }),
+
+  summary: asyncHandler(async (req, res) => {
+    const statuses = ['pending', 'complete', 'posted', 'delivered']
+    const summary = {}
+    for (const status of statuses) {
+      const row = ShipmentModel.sumGlobalByStatus(status)
+      summary[status] = { count: row.count, total_value: row.total }
+    }
+    res.json(apiResponse.success(summary))
   }),
 }
 

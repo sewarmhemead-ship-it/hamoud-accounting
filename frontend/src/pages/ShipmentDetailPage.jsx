@@ -1,15 +1,16 @@
 import { useState } from 'react'
-import { useParams, Link } from 'react-router-dom'
+import { useParams, Link, useNavigate } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { shipmentsApi } from '../api'
 import StatusBadge from '../components/StatusBadge'
 import ShipmentLifecycle from '../components/ShipmentLifecycle'
 import PageHeader from '../components/PageHeader'
-import { FIELD_LABELS } from '../constants'
+import { DUAL_COST_FIELDS, DUAL_PRICE_FIELDS } from '../constants'
 import { formatCurrency, formatDate } from '../utils/format'
+import { describeShipmentUpdate } from '../utils/shipmentUpdateDisplay'
 import { useUiStore } from '../store/auth.store'
 
-const EDITABLE_FIELDS = [
+const CLASSIC_FIELDS = [
   'tarseem',
   'service_fee',
   'workers',
@@ -21,8 +22,10 @@ const EDITABLE_FIELDS = [
   'other_expenses',
 ]
 
+
 export default function ShipmentDetailPage() {
   const { id } = useParams()
+  const navigate = useNavigate()
   const [editFields, setEditFields] = useState({})
   const [note, setNote] = useState('')
   const queryClient = useQueryClient()
@@ -63,71 +66,121 @@ export default function ShipmentDetailPage() {
     onError: (err) => showToast(err.message, 'error'),
   })
 
-  if (isLoading) return <p className="text-gray-500">جاري التحميل...</p>
+  if (isLoading) return (
+    <div className="space-y-4">
+      <div className="h-6 w-48 rounded-lg bg-white/5 animate-pulse" />
+      <div className="card h-32 bg-white/5 animate-pulse" />
+    </div>
+  )
 
   const s = data?.data
-  if (!s) return <p className="text-gray-500">السيارة غير موجودة</p>
+  if (!s) return <p className="text-ink-faint">السيارة غير موجودة</p>
 
   const progress = s.progress || {}
   const canEdit = s.status === 'pending' || s.status === 'complete'
   const canPost = s.status === 'complete'
   const canDeliver = s.status === 'posted'
 
+  // تحقق هل السيارة تستخدم نظام الكشف المزدوج
+  const hasDual = DUAL_COST_FIELDS.some(([k]) => s[k] != null) || DUAL_PRICE_FIELDS.some(([k]) => s[k] != null)
+
   const saveFields = () => {
+    const hasChanges = Object.entries(editFields).some(([, v]) => v !== '')
+    if (!hasChanges && !note) {
+      showToast('لا توجد تغييرات', 'error')
+      return
+    }
     const payload = { _note: note || undefined }
     for (const [key, val] of Object.entries(editFields)) {
       if (val !== '') payload[key] = parseFloat(val)
     }
-    if (Object.keys(payload).length <= 1 && !note) {
-      showToast('لا توجد تغييرات', 'error')
-      return
-    }
     updateMutation.mutate(payload)
   }
 
+  const renderFieldRow = (field, label) => {
+    const filled = s[field] != null
+    return (
+      <div key={field} className="flex items-center gap-4 flex-wrap">
+        <span className={`w-4 text-center ${filled ? 'text-success' : 'text-ink-faint'}`}>
+          {filled ? '✓' : '○'}
+        </span>
+        <span className="w-40 text-sm text-ink-soft">{label || FIELD_LABELS[field] || field}</span>
+        <span className="text-ink w-24">
+          {filled ? formatCurrency(s[field]) : '—'}
+        </span>
+        {canEdit && (
+          <input
+            type="number"
+            step="0.01"
+            min="0"
+            className="w-28 text-sm py-1"
+            placeholder="تحديث"
+            value={editFields[field] ?? ''}
+            onChange={(e) => setEditFields((f) => ({ ...f, [field]: e.target.value }))}
+          />
+        )}
+      </div>
+    )
+  }
+
   return (
-    <div className="space-y-6">
+    <div className="space-y-5">
+      {/* Breadcrumb */}
+      <div className="flex items-center gap-2 text-xs text-ink-faint">
+        <button type="button" onClick={() => navigate(-1)} className="hover:text-ink transition-colors">← رجوع</button>
+        <span>·</span>
+        <Link to="/shipments" className="hover:text-ink transition-colors">السيارات</Link>
+        <span>·</span>
+        <span className="text-ink font-mono">{s.ref_number}</span>
+      </div>
+
       <PageHeader
         title={s.ref_number}
-        subtitle={`${s.center_name} — ${s.source} → ${s.destination}`}
+        subtitle={`${s.source} → ${s.destination}`}
         actions={<StatusBadge status={s.status} />}
       />
 
       <ShipmentLifecycle currentStatus={s.status} />
 
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
         <div className="card">
-          <p className="text-sm text-gray-400">التاجر</p>
-          <p className="text-white font-medium">{s.center_name}</p>
+          <p className="text-xs text-ink-faint mb-1">التاجر</p>
+          <Link to={`/centers/${s.center_id}`} className="text-accent hover:text-accent-hover font-medium text-sm">
+            {s.center_name}
+          </Link>
         </div>
         <div className="card">
-          <p className="text-sm text-gray-400">المسار</p>
-          <p className="text-white text-sm">{s.source} → {s.destination}</p>
+          <p className="text-xs text-ink-faint mb-1">المخلص</p>
+          {s.broker_name ? (
+            <Link to={`/centers/${s.clearance_center_id}`} className="text-accent hover:text-accent-hover font-medium text-sm">
+              {s.broker_name}
+            </Link>
+          ) : (
+            <span className="text-ink-faint text-sm">—</span>
+          )}
         </div>
         <div className="card">
-          <p className="text-sm text-gray-400">تاريخ الدخول</p>
-          <p className="text-white">{formatDate(s.entry_date)}</p>
+          <p className="text-xs text-ink-faint mb-1">تاريخ الدخول</p>
+          <p className="text-ink text-sm">{formatDate(s.entry_date)}</p>
         </div>
         <div className="card">
-          <p className="text-sm text-gray-400">المجموع</p>
-          <p className="text-2xl font-bold text-accent">{formatCurrency(s.total_cost || 0)}</p>
+          <p className="text-xs text-ink-faint mb-1">المجموع</p>
+          <p className="text-2xl font-bold text-accent tabular-nums">{formatCurrency(s.total_cost || 0)}</p>
         </div>
       </div>
 
       {/* Progress bar */}
       <div className="card">
         <div className="flex justify-between text-sm mb-2">
-          <span className="text-gray-400">اكتمال الأقلام الإلزامية</span>
-          <span className="text-gray-300">
+          <span className="text-ink-soft">اكتمال الأقلام الإلزامية</span>
+          <span className="text-ink">
             {progress.filled || 0} / {progress.required || 3}
           </span>
         </div>
         <div className="h-2 bg-surface rounded-full overflow-hidden">
           <div
             className="h-full bg-accent transition-all"
-            style={{
-              width: `${((progress.filled || 0) / (progress.required || 3)) * 100}%`,
-            }}
+            style={{ width: `${((progress.filled || 0) / (progress.required || 3)) * 100}%` }}
           />
         </div>
         {progress.missing?.length > 0 && (
@@ -137,58 +190,46 @@ export default function ShipmentDetailPage() {
         )}
       </div>
 
-      {/* Fields table */}
-      <div className="card">
-        <h3 className="font-semibold text-white mb-4">الأقلام المالية</h3>
-        <div className="space-y-3">
-          {EDITABLE_FIELDS.map((field) => {
-            const filled = s[field] != null
-            return (
-              <div key={field} className="flex items-center gap-4 flex-wrap">
-                <span className={`w-4 text-center ${filled ? 'text-success' : 'text-gray-600'}`}>
-                  {filled ? '✓' : '○'}
-                </span>
-                <span className="w-32 text-sm text-gray-400">{FIELD_LABELS[field]}</span>
-                <span className="text-gray-200 w-24">
-                  {filled ? formatCurrency(s[field]) : '—'}
-                </span>
-                {canEdit && (
-                  <input
-                    type="number"
-                    step="0.01"
-                    min="0"
-                    className="w-28 text-sm py-1"
-                    placeholder="تحديث"
-                    value={editFields[field] ?? ''}
-                    onChange={(e) =>
-                      setEditFields((f) => ({ ...f, [field]: e.target.value }))
-                    }
-                  />
-                )}
-              </div>
-            )
-          })}
-        </div>
-
-        {canEdit && (
-          <div className="mt-4 pt-4 border-t border-surface-border space-y-3">
-            <input
-              placeholder="ملاحظة التعديل (اختياري)"
-              value={note}
-              onChange={(e) => setNote(e.target.value)}
-              className="w-full text-sm"
-            />
-            <button
-              type="button"
-              className="btn-secondary"
-              onClick={saveFields}
-              disabled={updateMutation.isPending}
-            >
-              حفظ التعديلات
-            </button>
+      {/* حقول الكشف المزدوج */}
+      {hasDual ? (
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
+          <div className="card space-y-3">
+            <h3 className="font-semibold text-danger text-sm">ما ندفعه للمخلص (التكلفة)</h3>
+            {DUAL_COST_FIELDS.map(([field, label]) => renderFieldRow(field, label))}
           </div>
-        )}
-      </div>
+          <div className="card space-y-3">
+            <h3 className="font-semibold text-success text-sm">ما نأخذه من التاجر (الفاتورة)</h3>
+            {DUAL_PRICE_FIELDS.map(([field, label]) => renderFieldRow(field, label))}
+          </div>
+        </div>
+      ) : (
+        <div className="card">
+          <h3 className="font-semibold text-ink mb-4">الأقلام المالية</h3>
+          <div className="space-y-3">
+            {CLASSIC_FIELDS.map((field) => renderFieldRow(field, FIELD_LABELS[field]))}
+          </div>
+        </div>
+      )}
+
+      {/* زر حفظ التعديلات */}
+      {canEdit && (
+        <div className="card space-y-3">
+          <input
+            placeholder="ملاحظة التعديل (اختياري)"
+            value={note}
+            onChange={(e) => setNote(e.target.value)}
+            className="w-full text-sm"
+          />
+          <button
+            type="button"
+            className="btn-secondary"
+            onClick={saveFields}
+            disabled={updateMutation.isPending}
+          >
+            حفظ التعديلات
+          </button>
+        </div>
+      )}
 
       {/* Actions */}
       <div className="flex gap-3 flex-wrap">
@@ -217,17 +258,26 @@ export default function ShipmentDetailPage() {
       {/* Update history */}
       {s.updates?.length > 0 && (
         <div className="card">
-          <h3 className="font-semibold text-white mb-3">سجل التعديلات</h3>
-          <ul className="space-y-2 text-sm">
-            {s.updates.map((u) => (
-              <li key={u.id} className="text-gray-400 border-b border-surface-border/50 pb-2">
-                <span className="text-gray-300">{FIELD_LABELS[u.field_name] || u.field_name}</span>
-                {' '}
-                {u.old_value ?? '—'} → {u.new_value}
-                {u.note && <span className="text-gray-500"> — {u.note}</span>}
-                <span className="block text-xs text-gray-600">{formatDate(u.updated_at)}</span>
-              </li>
-            ))}
+          <h3 className="font-semibold text-ink mb-3">سجل التعديلات</h3>
+          <ul className="space-y-3 text-sm">
+            {s.updates.map((raw) => {
+              const u = describeShipmentUpdate(raw)
+              return (
+                <li
+                  key={u.id}
+                  className="border-b border-surface-border pb-3 last:border-0"
+                >
+                  <p className="text-ink leading-relaxed">{u.summary}</p>
+                  {u.note && (
+                    <p className="text-ink-faint text-xs mt-1">ملاحظة: {u.note}</p>
+                  )}
+                  <p className="text-[11px] text-ink-faint mt-1.5 tabular-nums">
+                    {u.updated_at_display}
+                    {u.updated_by_name ? ` · ${u.updated_by_name}` : ''}
+                  </p>
+                </li>
+              )
+            })}
           </ul>
         </div>
       )}

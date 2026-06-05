@@ -1,0 +1,49 @@
+#Requires -Version 5.1
+<#
+.SYNOPSIS
+  Downloads Node.js 20 LTS win-x64 zip and extracts to a target folder (node.exe at root).
+#>
+param(
+    [Parameter(Mandatory = $true)]
+    [string]$TargetDir,
+    [string]$NodeVersion = 'v20.20.2'
+)
+
+$ErrorActionPreference = 'Stop'
+
+$ver = $NodeVersion -replace '^v', ''
+$zipName = "node-$ver-win-x64.zip"
+$url = "https://nodejs.org/dist/$NodeVersion/$zipName"
+$nodeExe = Join-Path $TargetDir 'node.exe'
+
+if (Test-Path $nodeExe) {
+    $v = & $nodeExe -v 2>$null
+    Write-Host "    Node runtime OK: $nodeExe ($v)" -ForegroundColor DarkGray
+    return $TargetDir
+}
+
+$cacheDir = Join-Path $env:TEMP 'hamoud-node-cache'
+$null = New-Item -ItemType Directory -Path $cacheDir -Force
+$zipPath = Join-Path $cacheDir $zipName
+
+if (-not (Test-Path $zipPath)) {
+    Write-Host "    Downloading $url ..." -ForegroundColor Cyan
+    Invoke-WebRequest -Uri $url -OutFile $zipPath -UseBasicParsing
+}
+
+$extractRoot = Join-Path $env:TEMP "node-extract-$ver"
+if (Test-Path $extractRoot) { Remove-Item -LiteralPath $extractRoot -Recurse -Force }
+$null = New-Item -ItemType Directory -Path $extractRoot -Force
+Expand-Archive -LiteralPath $zipPath -DestinationPath $extractRoot -Force
+
+$inner = Get-ChildItem -LiteralPath $extractRoot -Directory | Select-Object -First 1
+if (-not $inner -or -not (Test-Path (Join-Path $inner.FullName 'node.exe'))) {
+    throw "Invalid Node zip layout: $zipPath"
+}
+
+if (Test-Path $TargetDir) { Remove-Item -LiteralPath $TargetDir -Recurse -Force }
+$null = New-Item -ItemType Directory -Path $TargetDir -Force
+Copy-Item -LiteralPath (Join-Path $inner.FullName '*') -Destination $TargetDir -Recurse -Force
+
+Write-Host "    Node runtime ready: $nodeExe (& $nodeExe -v)" -ForegroundColor Green
+return $TargetDir

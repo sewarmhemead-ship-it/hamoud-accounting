@@ -13,18 +13,21 @@ export default function Toast() {
 
   if (!toast) return null
 
-  const colors = {
-    info: 'border-accent bg-accent-muted text-blue-200',
-    success: 'border-success bg-success/10 text-green-300',
-    error: 'border-danger bg-danger/10 text-red-300',
+  const accents = {
+    info:    { border: 'rgba(201,168,76,0.4)',  text: '#e8c96a', icon: 'ℹ' },
+    success: { border: 'rgba(34,197,94,0.4)',   text: '#4ade80', icon: '✓' },
+    error:   { border: 'rgba(239,68,68,0.4)',   text: '#f87171', icon: '✕' },
   }
+  const a = accents[toast.type] || accents.info
 
   return (
-    <div className="fixed bottom-6 left-6 z-50 max-w-sm animate-in fade-in">
+    <div className="fixed bottom-6 left-6 z-50 max-w-sm animate-fade-in">
       <div
-        className={`rounded-lg border px-4 py-3 shadow-lg ${colors[toast.type] || colors.info}`}
+        className="toast-glass rounded-2xl px-4 py-3 flex items-center gap-3"
+        style={{ borderLeft: `3px solid ${a.border}` }}
       >
-        {toast.message}
+        <span className="text-sm font-bold shrink-0" style={{ color: a.border }}>{a.icon}</span>
+        <span className="text-sm" style={{ color: a.text }}>{toast.message}</span>
       </div>
     </div>
   )

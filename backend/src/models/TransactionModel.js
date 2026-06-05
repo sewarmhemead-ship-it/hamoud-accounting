@@ -1,4 +1,5 @@
 const BaseModel = require('./BaseModel')
+const { buildTransactionListFilters } = require('./transactionListQuery')
 
 class TransactionModel extends BaseModel {
   constructor() {
@@ -124,6 +125,118 @@ class TransactionModel extends BaseModel {
     `
       )
       .get(date)
+  }
+
+  /** سيارات مُرحَّلة في اليوم — إيراد تخليص التاجر (قراءة فقط، نفس منطق sumPostedClearancesByDate) */
+  listPostedClearancesByDate(date) {
+    return this.db
+      .prepare(
+        `
+      SELECT
+        s.id AS shipment_id,
+        s.ref_number,
+        s.goods_name,
+        s.status,
+        datetime(s.posted_at) AS posted_at,
+        c.id AS trader_id,
+        c.name AS trader_name,
+        t.id AS transaction_id,
+        t.amount_usd AS clearance_amount
+      FROM transactions t
+      INNER JOIN shipments s ON s.id = t.shipment_id
+      INNER JOIN centers c ON c.id = t.center_id
+      WHERE t.type = 'out'
+        AND t.category = 'clearance'
+        AND t.is_deleted = 0
+        AND c.type = 'trader'
+        AND date(s.posted_at) = date(?)
+      ORDER BY s.posted_at ASC, s.ref_number ASC
+    `
+      )
+      .all(date)
+  }
+
+  /** دفعات نقدية في اليوم — للربط مع صفحة النقد والتقارير */
+  listPaymentsByDate(date) {
+    return this.db
+      .prepare(
+        `
+      SELECT
+        t.id,
+        t.date,
+        t.amount_usd,
+        t.category,
+        t.notes,
+        c.id AS center_id,
+        c.name AS center_name,
+        c.type AS center_type,
+        s.id AS shipment_id,
+        s.ref_number AS shipment_ref
+      FROM transactions t
+      LEFT JOIN centers c ON c.id = t.center_id
+      LEFT JOIN shipments s ON s.id = t.shipment_id
+      WHERE t.type = 'in'
+        AND t.is_deleted = 0
+        AND date(t.date) = date(?)
+      ORDER BY t.date DESC, t.id DESC
+    `
+      )
+      .all(date)
+  }
+
+  /** قائمة عامة مع تفاصيل المركز والسيارة — قراءة فقط، لا تغيّر المحرك */
+  listWithDetails({ filters = {}, limit = 50, offset = 0 } = {}) {
+    const { joins, where, params } = buildTransactionListFilters(filters)
+
+    const rows = this.db
+      .prepare(
+        `
+      SELECT
+        t.*,
+        c.name AS center_name,
+        c.type AS center_type,
+        s.ref_number AS shipment_ref,
+        s.goods_name AS shipment_goods,
+        s.status AS shipment_status,
+        u.name AS created_by_name
+      ${joins}
+      WHERE ${where}
+      ORDER BY t.date DESC, t.id DESC
+      LIMIT ? OFFSET ?
+    `
+      )
+      .all(...params, limit, offset)
+
+    const { count: total } = this.db
+      .prepare(
+        `
+      SELECT COUNT(*) AS count
+      ${joins}
+      WHERE ${where}
+    `
+      )
+      .get(...params)
+
+    const sums = this.db
+      .prepare(
+        `
+      SELECT
+        COALESCE(SUM(CASE WHEN t.type = 'out' THEN t.amount_usd ELSE 0 END), 0) AS total_out,
+        COALESCE(SUM(CASE WHEN t.type = 'in'  THEN t.amount_usd ELSE 0 END), 0) AS total_in
+      ${joins}
+      WHERE ${where}
+    `
+      )
+      .get(...params)
+
+    return {
+      rows,
+      total,
+      total_out: sums.total_out,
+      total_in: sums.total_in,
+      limit,
+      offset,
+    }
   }
 
   findByShipment(shipmentId) {

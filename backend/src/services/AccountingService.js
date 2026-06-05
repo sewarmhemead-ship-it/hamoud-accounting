@@ -2,6 +2,7 @@ const TransactionModel = require('../models/TransactionModel')
 const ShipmentModel = require('../models/ShipmentModel')
 const { CURRENCY } = require('../config/constants')
 const { convertToUsd } = require('../engine/currency')
+const { nowISO } = require('../utils/dates')
 const {
   calculateCenterBalance,
   calculateGrandTotal,
@@ -45,89 +46,67 @@ class AccountingService {
     }
   }
 
-  createPayment(data, userId) {
+  // بناء قيد معاملة — المصدر الموحّد لـ createPayment و createManualOut
+  _buildTx(data, type, userId) {
     const { amount_usd, exchange_rate } = convertToUsd(
       data.amount,
       data.currency || CURRENCY.USD,
       data.exchange_rate
     )
-
+    const defaultCategory = type === 'in' ? 'payment' : 'adjustment'
     return TransactionModel.create({
-      ref_number: data.ref_number,
-      date: data.date,
-      type: 'in',
-      center_id: data.center_id,
-      currency: data.currency || CURRENCY.USD,
-      amount: data.amount,
+      ref_number:   data.ref_number,
+      date:         data.date,
+      type,
+      center_id:    data.center_id,
+      currency:     data.currency || CURRENCY.USD,
+      amount:       data.amount,
       amount_usd,
       exchange_rate,
-      category: data.category || 'payment',
+      category:     data.category || defaultCategory,
       is_delivered: 1,
-      notes: data.notes || null,
-      created_by: userId,
+      notes:        data.notes || null,
+      created_by:   userId,
     })
+  }
+
+  createPayment(data, userId) {
+    return this._buildTx(data, 'in', userId)
   }
 
   createManualOut(data, userId) {
-    const { amount_usd, exchange_rate } = convertToUsd(
-      data.amount,
-      data.currency || CURRENCY.USD,
-      data.exchange_rate
-    )
-
-    return TransactionModel.create({
-      ref_number: data.ref_number,
-      date: data.date,
-      type: 'out',
-      center_id: data.center_id,
-      currency: data.currency || CURRENCY.USD,
-      amount: data.amount,
-      amount_usd,
-      exchange_rate,
-      category: data.category || 'adjustment',
-      is_delivered: 1,
-      notes: data.notes || null,
-      created_by: userId,
-    })
+    return this._buildTx(data, 'out', userId)
   }
 
   offsetCenters(fromCenterId, toCenterId, amount, userId, notes, refOut, refIn) {
-    const { getDatabase } = require('../config/database')
-    const db = getDatabase()
+    const baseData = {
+      currency: CURRENCY.USD,
+      amount,
+      amount_usd: amount,
+      exchange_rate: 1,
+      category: 'offset',
+      notes: notes || 'مقاصة',
+    }
 
-    const offset = db.transaction(() => {
+    return TransactionModel.transaction(() => {
       const outTx = TransactionModel.create({
+        ...baseData,
         ref_number: refOut,
-        date: new Date().toISOString(),
-        type: 'in',
-        center_id: fromCenterId,
-        currency: CURRENCY.USD,
-        amount,
-        amount_usd: amount,
-        category: 'offset',
-        is_delivered: 1,
-        notes: notes || 'مقاصة',
+        date:       nowISO(),
+        type:       'in',
+        center_id:  fromCenterId,
         created_by: userId,
       })
-
       const inTx = TransactionModel.create({
+        ...baseData,
         ref_number: refIn,
-        date: new Date().toISOString(),
-        type: 'out',
-        center_id: toCenterId,
-        currency: CURRENCY.USD,
-        amount,
-        amount_usd: amount,
-        category: 'offset',
-        is_delivered: 1,
-        notes: notes || 'مقاصة',
+        date:       nowISO(),
+        type:       'out',
+        center_id:  toCenterId,
         created_by: userId,
       })
-
       return { out: outTx, in: inTx }
     })
-
-    return offset()
   }
 }
 

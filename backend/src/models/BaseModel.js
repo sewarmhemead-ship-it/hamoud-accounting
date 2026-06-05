@@ -5,8 +5,11 @@ const { ALLOWED_ORDER } = require('../config/constants')
 class BaseModel {
   constructor(tableName, allowedFilters = null) {
     this.table = tableName
-    this.db = getDatabase()
     this.allowedFilters = allowedFilters
+  }
+
+  get db() {
+    return getDatabase()
   }
 
   findById(id) {

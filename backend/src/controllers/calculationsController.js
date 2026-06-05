@@ -58,15 +58,6 @@ const calculationsController = {
     }
   }),
 
-  juice: asyncHandler(async (req, res, next) => {
-    try {
-      const result = engine.calculateJuiceProfit(req.body)
-      res.json(apiResponse.success(result))
-    } catch (e) {
-      mapCalcError(e, next)
-    }
-  }),
-
   dailyProfit: asyncHandler(async (req, res, next) => {
     try {
       const gross = engine.calculateDailyGrossProfit(req.body)

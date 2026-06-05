@@ -1,11 +1,11 @@
 import { formatCurrency } from '../utils/format'
 
 const TONES = {
-  default: { card: 'tone-blue', value: 'text-info' },
-  positive: { card: 'tone-green', value: 'text-success' },
-  warning: { card: 'tone-amber', value: 'text-warning' },
-  accent: { card: 'tone-gold', value: 'text-accent' },
-  danger: { card: 'tone-red', value: 'text-danger' },
+  default:  { card: 'tone-blue',    value: 'text-accent' },
+  positive: { card: 'tone-green',   value: 'text-success' },
+  warning:  { card: 'tone-warning', value: 'text-warning' },
+  accent:   { card: 'tone-blue',    value: 'text-accent' },
+  danger:   { card: 'tone-red',     value: 'text-danger' },
 }
 
 export default function BalanceCard({

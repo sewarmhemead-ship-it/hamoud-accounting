@@ -10,12 +10,15 @@ node_modules/
 # Database files
 *.db
 *.db-*
+backend/data/
 **/data/*.db
 **/data/*.db-*
 
-# Bundled initial DB snapshot (shipped to Railway for first-boot restore)
+# Bundled initial DB snapshot (first local boot if data/ is empty)
 !backend/seed-data/
 !backend/seed-data/initial.db
+!backend/seed-data/customer-ready.db
+!backend/seed-data/centers-master.json
 
 # Logs
 *.log
@@ -28,6 +31,9 @@ build/
 **/build/
 backend/public/
 
+# Local DB backups
+backups/
+
 # Reports / generated artifacts
 *.tmp
 .cache/
@@ -37,3 +43,14 @@ backend/public/
 Thumbs.db
 .vscode/
 .idea/
+
+# Packaged releases
+release/
+
+
+# Runtime uploads
+backend/uploads/
+
+
+frontend/.env.development
+

@@ -1,9 +1,21 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
+import { Link } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { profitApi } from '../api'
-import BalanceCard from '../components/BalanceCard'
-import { formatCurrency, todayISO, formatDate } from '../utils/format'
-import { useUiStore } from '../store/auth.store'
+import ReportExportButtons from '../components/ReportExportButtons'
+import GlassPanel from '../components/ui/GlassPanel'
+import KpiStatCard from '../components/ui/KpiStatCard'
+import { formatCurrency, todayISO, formatDate, parseNum } from '../utils/format'
+import {
+  emptyExpenseState,
+  parseBudgetNotes,
+  rollupExpenseTotals,
+  serializeBudgetNotes,
+} from '../utils/profitBudget'
+import ExpenseBudgetForm, { ExpenseBudgetBreakdown } from '../components/profit/ExpenseBudgetForm'
+import { PERM } from '../constants/permissions'
+import { useAuthStore, useUiStore } from '../store/auth.store'
+import { downloadBlob } from '../utils/download'
 
 const DIFF_FIELDS = [
   { key: 'transport_diff', label: 'فرق نقل تركي' },
@@ -17,7 +29,15 @@ const MONTHS_AR = [
   'يوليو', 'أغسطس', 'سبتمبر', 'أكتوبر', 'نوفمبر', 'ديسمبر',
 ]
 
-const n = (v) => parseFloat(v) || 0
+const QUICK_LINKS = [
+  { to: '/', label: 'لوحة التحكم', icon: '📊' },
+  { to: '/shipments/ready', label: 'جاهزة للترحيل', icon: '🚛' },
+  { to: '/transactions', label: 'القيود', icon: '📒' },
+  { to: '/cash', label: 'النقد', icon: '💵' },
+  { to: '/reports', label: 'التقارير', icon: '📑' },
+]
+
+const n = parseNum
 
 function fmtLocal(d) {
   const y = d.getFullYear()
@@ -38,7 +58,6 @@ function shiftMonth(iso, months) {
   return fmtLocal(dt)
 }
 
-// مخطّط أعمدة SVG خفيف بلا تبعيات
 function MonthlyBarChart({ days, selected, onPick }) {
   if (!days?.length) {
     return <p className="text-ink-faint text-sm py-8 text-center">لا أيام مُغلقة في هذا الشهر بعد</p>
@@ -68,9 +87,18 @@ function MonthlyBarChart({ days, selected, onPick }) {
         const dayNum = parseInt(d.date.slice(8, 10), 10)
         return (
           <g key={d.date} onClick={() => onPick(d.date)} style={{ cursor: 'pointer' }}>
-            <rect x={pad.x + slot * i} y={pad.t} width={slot} height={innerH} fill={isSel ? '#b8860b' : 'transparent'} fillOpacity={isSel ? 0.12 : 0} />
+            <rect
+              x={pad.x + slot * i}
+              y={pad.t}
+              width={slot}
+              height={innerH}
+              fill={isSel ? '#b8860b' : 'transparent'}
+              fillOpacity={isSel ? 0.12 : 0}
+            />
             <rect x={x} y={y} width={bw} height={Math.max(2, h)} rx="3" fill={color} fillOpacity={isSel ? 1 : 0.75} />
-            <text x={x + bw / 2} y={H - 8} textAnchor="middle" fontSize="10" fill="currentColor" fillOpacity="0.55">{dayNum}</text>
+            <text x={x + bw / 2} y={H - 8} textAnchor="middle" fontSize="10" fill="currentColor" fillOpacity="0.55">
+              {dayNum}
+            </text>
           </g>
         )
       })}
@@ -81,9 +109,10 @@ function MonthlyBarChart({ days, selected, onPick }) {
 function WaterfallRow({ label, value, op, strong, tone }) {
   const color = tone === 'pos' ? 'text-success' : tone === 'neg' ? 'text-danger' : 'text-ink'
   return (
-    <div className={`flex items-center justify-between py-2 ${strong ? 'border-t border-surface-border mt-1' : ''}`}>
+    <div className={`flex items-center justify-between py-2.5 ${strong ? 'border-t border-surface-border mt-2 pt-3' : ''}`}>
       <span className={`text-sm ${strong ? 'font-semibold text-ink' : 'text-ink-soft'}`}>
-        {op && <span className="text-ink-faint ml-1">{op}</span>}{label}
+        {op && <span className="text-ink-faint ml-1 font-mono">{op}</span>}
+        {label}
       </span>
       <span className={`text-sm font-semibold tabular-nums ${strong ? color : 'text-ink-soft'}`}>
         {formatCurrency(value)}
@@ -94,20 +123,25 @@ function WaterfallRow({ label, value, op, strong, tone }) {
 
 export default function ProfitPage() {
   const [date, setDate] = useState(todayISO())
-  const [office, setOffice] = useState('')
-  const [home, setHome] = useState('')
-  const [notes, setNotes] = useState('')
-  const [diffs, setDiffs] = useState({ transport_diff: '', workers_diff: '', driver_diff: '', credit_diff: '' })
+  const [memo, setMemo] = useState('')
+  const [expenseSections, setExpenseSections] = useState(emptyExpenseState)
+  const [diffs, setDiffs] = useState({
+    transport_diff: '',
+    workers_diff: '',
+    driver_diff: '',
+    credit_diff: '',
+  })
+  const [editMode, setEditMode] = useState(false)
   const queryClient = useQueryClient()
   const showToast = useUiStore((s) => s.showToast)
+  const hasPermission = useAuthStore((s) => s.hasPermission)
+  const canClose = hasPermission(PERM.PROFIT_CLOSE)
+  const canEditClosed = hasPermission(PERM.PROFIT_EDIT_CLOSED)
+  const setSection = (key, lines) => setExpenseSections((s) => ({ ...s, [key]: lines }))
 
-  const { data: previewRes } = useQuery({
-    queryKey: ['profit', 'preview', date],
-    queryFn: () => profitApi.preview(date),
-  })
-  const { data: closedRes, refetch } = useQuery({
-    queryKey: ['profit', 'closed', date],
-    queryFn: () => profitApi.get(date),
+  const { data: detailRes, isLoading, refetch } = useQuery({
+    queryKey: ['profit', 'detail', date],
+    queryFn: () => profitApi.detail(date),
   })
 
   const [year, month] = date.split('-')
@@ -116,14 +150,51 @@ export default function ProfitPage() {
     queryFn: () => profitApi.monthly(parseInt(year, 10), parseInt(month, 10)),
   })
 
-  const preview = previewRes?.data
-  const closed = closedRes?.data
-  const monthly = monthlyRes?.data
+  const detail = detailRes?.data
+  const preview = detail?.preview
+  const closed = detail?.closed
+  const movements = detail?.movements || []
+  const payments = detail?.payments || []
   const isClosed = !!closed
+  const monthly = monthlyRes?.data
 
-  // قيم العرض — من السجل المُغلق أو من المعاينة الحيّة
+  const { office_expenses: officeTotal, home_expenses: homeTotal } = useMemo(
+    () => rollupExpenseTotals(expenseSections, n),
+    [expenseSections]
+  )
+
+  const parsedBudget = useMemo(
+    () => (closed?.notes ? parseBudgetNotes(closed.notes) : null),
+    [closed?.notes]
+  )
+
+  useEffect(() => {
+    if (!detail) return
+    if (closed) {
+      const budget = parseBudgetNotes(closed.notes)
+      setMemo(budget.memo)
+      setExpenseSections({
+        office: budget.office.length ? budget.office : emptyExpenseState().office,
+        home: budget.home.length ? budget.home : emptyExpenseState().home,
+        operations: budget.operations.length ? budget.operations : emptyExpenseState().operations,
+        misc: budget.misc.length ? budget.misc : emptyExpenseState().misc,
+      })
+      setDiffs({
+        transport_diff: String(closed.transport_diff ?? ''),
+        workers_diff: String(closed.workers_diff ?? ''),
+        driver_diff: String(closed.driver_diff ?? ''),
+        credit_diff: String(closed.credit_diff ?? ''),
+      })
+      setEditMode(false)
+    } else {
+      setMemo('')
+      setExpenseSections(emptyExpenseState())
+      setDiffs({ transport_diff: '', workers_diff: '', driver_diff: '', credit_diff: '' })
+    }
+  }, [date, closed?.id, closed?.updated_at])
+
   const view = useMemo(() => {
-    if (isClosed) {
+    if (isClosed && !editMode) {
       const diffSum = DIFF_FIELDS.reduce((s, f) => s + n(closed[f.key]), 0)
       return {
         base: (Number(closed.gross_profit) || 0) - diffSum,
@@ -138,18 +209,31 @@ export default function ProfitPage() {
     const base = preview?.gross_revenue || 0
     const diffSum = DIFF_FIELDS.reduce((s, f) => s + n(diffs[f.key]), 0)
     const gross = base + diffSum
-    const office_ = n(office)
-    const home_ = n(home)
     return {
       base,
       diffs: Object.fromEntries(DIFF_FIELDS.map((f) => [f.key, n(diffs[f.key])])),
       gross,
-      office: office_,
-      home: home_,
-      net: gross - office_ - home_,
+      office: officeTotal,
+      home: homeTotal,
+      net: gross - officeTotal - homeTotal,
       trucks: preview?.num_trucks || 0,
     }
-  }, [isClosed, closed, preview, diffs, office, home])
+  }, [isClosed, editMode, closed, preview, diffs, officeTotal, homeTotal])
+
+  const invalidateAll = () => {
+    queryClient.invalidateQueries({ queryKey: ['profit'] })
+    queryClient.invalidateQueries({ queryKey: ['dashboard'] })
+  }
+
+  const buildPayload = () => ({
+    transport_diff: n(diffs.transport_diff),
+    workers_diff: n(diffs.workers_diff),
+    driver_diff: n(diffs.driver_diff),
+    credit_diff: n(diffs.credit_diff),
+    office_expenses: officeTotal,
+    home_expenses: homeTotal,
+    notes: serializeBudgetNotes(memo, expenseSections, n),
+  })
 
   const closeMutation = useMutation({
     mutationFn: () =>
@@ -157,113 +241,336 @@ export default function ProfitPage() {
         date,
         num_trucks: preview?.num_trucks,
         clearance_diff: 0,
-        transport_diff: n(diffs.transport_diff),
-        workers_diff: n(diffs.workers_diff),
-        driver_diff: n(diffs.driver_diff),
-        credit_diff: n(diffs.credit_diff),
-        office_expenses: n(office),
-        home_expenses: n(home),
-        notes: notes || undefined,
+        ...buildPayload(),
       }),
     onSuccess: () => {
       showToast('تم إغلاق اليوم', 'success')
       refetch()
-      queryClient.invalidateQueries({ queryKey: ['profit'] })
+      invalidateAll()
     },
     onError: (err) => showToast(err.message, 'error'),
   })
 
-  return (
-    <div className="space-y-6">
-      {/* شريط التنقّل */}
-      <div className="flex items-center justify-between gap-4 flex-wrap">
-        <div className="flex items-center gap-2">
-          <button type="button" className="btn-secondary !py-1.5 !px-2.5" onClick={() => setDate(shiftDate(date, -1))}>‹</button>
-          <input type="date" value={date} onChange={(e) => setDate(e.target.value)} className="w-44" />
-          <button type="button" className="btn-secondary !py-1.5 !px-2.5" onClick={() => setDate(shiftDate(date, 1))}>›</button>
-          <button type="button" className="btn-secondary !py-1.5 !px-3 text-xs" onClick={() => setDate(todayISO())}>اليوم</button>
+  const updateMutation = useMutation({
+    mutationFn: () => profitApi.update(date, buildPayload()),
+    onSuccess: () => {
+      showToast('تم تحديث سجل اليوم', 'success')
+      setEditMode(false)
+      refetch()
+      invalidateAll()
+    },
+    onError: (err) => showToast(err.message, 'error'),
+  })
+
+  const movementsMatch =
+    Math.abs((detail?.movements_total || 0) - (preview?.gross_revenue || 0)) < 0.02
+
+  if (isLoading && !detail) {
+    return (
+      <div className="space-y-4 animate-pulse">
+        <div className="h-12 rounded-2xl glass-panel" />
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+          {[1, 2, 3, 4].map((i) => (
+            <div key={i} className="h-28 rounded-2xl glass-panel" />
+          ))}
         </div>
-        <span className={`pill ${isClosed ? 'bg-success/20 text-success' : 'bg-warning/20 text-warning'}`}>
-          {isClosed ? '● مُغلق' : '◌ مفتوح'}
-        </span>
+      </div>
+    )
+  }
+
+  return (
+    <div className="space-y-6 animate-fade-in">
+      <GlassPanel className="!p-4 flex flex-wrap items-center justify-between gap-4">
+        <div>
+          <h1 className="text-xl font-bold text-ink">المربح اليومي</h1>
+          <p className="text-xs text-ink-faint mt-0.5">
+            ميزانية يومية — فروقات — مصاريف مفصّلة — تقرير لكل سيارة مُرحَّلة
+          </p>
+        </div>
+        <div className="flex items-center gap-2 flex-wrap">
+          <button type="button" className="btn-secondary !py-1.5 !px-2.5" onClick={() => setDate(shiftDate(date, -1))}>
+            ‹
+          </button>
+          <input type="date" value={date} onChange={(e) => setDate(e.target.value)} className="w-44" />
+          <button type="button" className="btn-secondary !py-1.5 !px-2.5" onClick={() => setDate(shiftDate(date, 1))}>
+            ›
+          </button>
+          <button type="button" className="btn-secondary !py-1.5 !px-3 text-xs" onClick={() => setDate(todayISO())}>
+            اليوم
+          </button>
+          <span className={`pill ${isClosed ? 'bg-success/20 text-success' : 'bg-warning/20 text-warning'}`}>
+            {isClosed ? '● مُغلق' : '◌ مفتوح'}
+          </span>
+        </div>
+      </GlassPanel>
+
+      <div className="flex flex-wrap gap-2">
+        {QUICK_LINKS.map((l) => (
+          <Link key={l.to} to={l.to} className="btn-secondary !py-1.5 !px-3 text-xs gap-1.5 inline-flex items-center">
+            <span>{l.icon}</span>
+            {l.label}
+          </Link>
+        ))}
+        {monthly?.days_count > 0 && (
+          <div className="mr-auto">
+            <ReportExportButtons
+              filenameBase={`مربح_شهري_${year}-${month}`}
+              fetchBlob={(fmt) => profitApi.monthBlob(year, month, fmt)}
+              xlsxLabel="⬇ Excel الشهر"
+              pdfLabel="⬇ PDF الشهر"
+            />
+          </div>
+        )}
       </div>
 
-      {/* مؤشرات اليوم */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-        <BalanceCard title="تخليص الشركة" value={view.base} variant="accent" icon="🏛" subtitle="أساس — قيود مرحّلة" />
-        <BalanceCard title="سيارات تركية" value={view.trucks} format="number" icon="🚛" />
-        <BalanceCard title="إجمالي اليوم" value={view.gross} variant="warning" icon="∑" subtitle="تخليص + فروقات" />
-        <BalanceCard title="صافي اليوم" value={view.net} variant={view.net >= 0 ? 'positive' : 'danger'} icon="💰" subtitle="بعد المصاريف" />
+      <GlassPanel className="!p-4 flex flex-wrap items-center justify-between gap-4 border border-accent/30">
+        <div>
+          <p className="font-semibold text-ink">تقارير اليوم — {formatDate(date)}</p>
+          <p className="text-xs text-ink-faint mt-1">
+            Excel و PDF: الميزانية، فروقات، مصاريف مفصّلة، كل سيارة مُرحَّلة، والدفعات
+          </p>
+        </div>
+        <ReportExportButtons
+          filenameBase={`مربح_يومي_${date}`}
+          fetchBlob={(fmt) => profitApi.dayBlob(date, fmt)}
+          xlsxLabel="📊 Excel اليوم"
+          pdfLabel="📄 PDF اليوم"
+        />
+      </GlassPanel>
+
+      <div className="grid grid-cols-2 lg:grid-cols-5 gap-4">
+        <KpiStatCard icon="🏛" label="تخليص الشركة" value={view.base} sub="أساس — قيود تاجر" tone="accent" />
+        <KpiStatCard
+          icon="🚛"
+          label="سيارات مرحّلة"
+          value={view.trucks}
+          format="number"
+          sub={movementsMatch ? 'متطابق مع القيود' : 'تحقق من القيود'}
+          tone="accent"
+        />
+        <KpiStatCard icon="💵" label="دفعات اليوم" value={preview?.payments_received || 0} sub="وارد نقدي" tone="accent" />
+        <KpiStatCard icon="∑" label="إجمالي اليوم" value={view.gross} sub="تخليص + فروقات" tone="warning" />
+        <KpiStatCard
+          icon="💰"
+          label="صافي اليوم"
+          value={view.net}
+          sub="بعد المصاريف"
+          tone={view.net >= 0 ? 'success' : 'danger'}
+        />
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {/* الإدخال */}
-        <div className="card space-y-4">
-          <h3 className="font-semibold text-ink">{isClosed ? '✓ تم إغلاق اليوم' : 'فروقات ومصاريف اليوم'}</h3>
-          {!isClosed ? (
+      {!movementsMatch && (preview?.gross_revenue || 0) > 0 && (
+        <p className="text-xs text-warning bg-warning/10 rounded-lg px-3 py-2">
+          تنبيه: مجموع إيراد الحركات ({formatCurrency(detail?.movements_total)}) يختلف عن معاينة التخليص (
+          {formatCurrency(preview?.gross_revenue)}). راجع قيود الترحيل.
+        </p>
+      )}
+
+      <div className="grid grid-cols-1 xl:grid-cols-3 gap-6">
+        <GlassPanel className="xl:col-span-1 space-y-4">
+          <h3 className="font-semibold text-ink">
+            {isClosed && !editMode
+              ? 'اليوم مُغلق'
+              : isClosed && editMode
+                ? 'تعديل الإغلاق (مشرف)'
+                : 'إغلاق اليوم'}
+          </h3>
+
+          {!isClosed && canClose && (
             <>
               <div>
-                <p className="text-xs text-ink-faint mb-2">فروقات (من ملف مربح يومي)</p>
+                <p className="text-xs text-ink-faint mb-2">فروقات (ملف مربح يومي)</p>
                 <div className="grid grid-cols-2 gap-3">
                   {DIFF_FIELDS.map((f) => (
                     <div key={f.key}>
                       <label className="label text-xs">{f.label}</label>
-                      <input type="number" step="0.01" value={diffs[f.key]} onChange={(e) => setDiffs({ ...diffs, [f.key]: e.target.value })} placeholder="0" />
+                      <input
+                        type="number"
+                        step="0.01"
+                        value={diffs[f.key]}
+                        onChange={(e) => setDiffs({ ...diffs, [f.key]: e.target.value })}
+                        placeholder="0"
+                      />
                     </div>
                   ))}
                 </div>
               </div>
-              <div>
-                <p className="text-xs text-ink-faint mb-2">المصاريف</p>
-                <div className="grid grid-cols-2 gap-3">
-                  <div>
-                    <label className="label text-xs">مصاريف مكتب</label>
-                    <input type="number" step="0.01" value={office} onChange={(e) => setOffice(e.target.value)} placeholder="0" />
-                  </div>
-                  <div>
-                    <label className="label text-xs">مصاريف منزل</label>
-                    <input type="number" step="0.01" value={home} onChange={(e) => setHome(e.target.value)} placeholder="0" />
-                  </div>
-                </div>
-              </div>
-              <div>
-                <label className="label text-xs">ملاحظات</label>
-                <textarea rows={2} className="w-full" value={notes} onChange={(e) => setNotes(e.target.value)} />
-              </div>
-              <button type="button" className="btn-success w-full" onClick={() => closeMutation.mutate()} disabled={closeMutation.isPending}>
-                {closeMutation.isPending ? 'جاري الإغلاق...' : 'إغلاق اليوم'}
+              <ExpenseBudgetForm
+                sections={expenseSections}
+                setSection={setSection}
+                parseNum={n}
+                memo={memo}
+                setMemo={setMemo}
+              />
+              <button
+                type="button"
+                className="btn-success w-full"
+                onClick={() => closeMutation.mutate()}
+                disabled={closeMutation.isPending}
+              >
+                {closeMutation.isPending ? 'جاري الإغلاق...' : 'إغلاق اليوم وحفظ الميزانية'}
               </button>
             </>
-          ) : (
-            <p className="text-sm text-ink-soft">
-              أُغلق هذا اليوم. القيم النهائية معروضة في تفصيل الحساب. {closed.notes && <span className="block mt-2 text-ink-faint">ملاحظات: {closed.notes}</span>}
-            </p>
           )}
-        </div>
 
-        {/* تفصيل الحساب (waterfall) */}
-        <div className="card">
-          <h3 className="font-semibold text-ink mb-2">تفصيل الحساب</h3>
-          <div className="divide-y divide-surface-border/40">
-            <WaterfallRow label="تخليص الشركة" value={view.base} />
-            {DIFF_FIELDS.map((f) => (
-              <WaterfallRow key={f.key} op="+" label={f.label} value={view.diffs[f.key]} />
-            ))}
-            <WaterfallRow label="إجمالي اليوم" value={view.gross} strong />
-            <WaterfallRow op="−" label="مصاريف مكتب" value={view.office} />
-            <WaterfallRow op="−" label="مصاريف منزل" value={view.home} />
-            <WaterfallRow label="صافي اليوم" value={view.net} strong tone={view.net >= 0 ? 'pos' : 'neg'} />
+          {!isClosed && !canClose && (
+            <p className="text-sm text-warning">ليس لديك صلاحية إغلاق اليوم. اطلب صلاحية «إغلاق اليوم» من المدير.</p>
+          )}
+
+          {isClosed && editMode && canEditClosed && (
+            <>
+              <p className="text-xs text-accent bg-accent/10 rounded-lg px-2 py-1.5">
+                تعديل حصراً للمشرف بصلاحيات كاملة
+              </p>
+              <div className="grid grid-cols-2 gap-3">
+                {DIFF_FIELDS.map((f) => (
+                  <div key={f.key}>
+                    <label className="label text-xs">{f.label}</label>
+                    <input
+                      type="number"
+                      step="0.01"
+                      value={diffs[f.key]}
+                      onChange={(e) => setDiffs({ ...diffs, [f.key]: e.target.value })}
+                    />
+                  </div>
+                ))}
+              </div>
+              <ExpenseBudgetForm
+                sections={expenseSections}
+                setSection={setSection}
+                parseNum={n}
+                memo={memo}
+                setMemo={setMemo}
+              />
+              <div className="flex gap-2">
+                <button
+                  type="button"
+                  className="btn-success flex-1"
+                  onClick={() => updateMutation.mutate()}
+                  disabled={updateMutation.isPending}
+                >
+                  حفظ التعديل
+                </button>
+                <button type="button" className="btn-secondary" onClick={() => setEditMode(false)}>
+                  إلغاء
+                </button>
+              </div>
+            </>
+          )}
+
+          {isClosed && !editMode && (
+            <div className="space-y-3">
+              <p className="text-sm text-ink-soft">تم حفظ الميزانية. التفاصيل أدناه والتقارير تتضمن كل البنود.</p>
+              {parsedBudget && <ExpenseBudgetBreakdown budget={parsedBudget} parseNum={n} />}
+              {canEditClosed ? (
+                <button type="button" className="btn-secondary w-full" onClick={() => setEditMode(true)}>
+                  تعديل السجل (مشرف)
+                </button>
+              ) : (
+                <p className="text-[11px] text-ink-faint">التعديل بعد الإغلاق للمشرف بصلاحية «تعديل يوم مُغلق» فقط.</p>
+              )}
+            </div>
+          )}
+        </GlassPanel>
+
+        <GlassPanel className="xl:col-span-1">
+          <h3 className="font-semibold text-ink mb-3">تفصيل الميزانية</h3>
+          <WaterfallRow label="تخليص الشركة (أساس)" value={view.base} />
+          {DIFF_FIELDS.map((f) => (
+            <WaterfallRow key={f.key} op="+" label={f.label} value={view.diffs[f.key]} />
+          ))}
+          <WaterfallRow label="إجمالي اليوم" value={view.gross} strong />
+          <WaterfallRow op="−" label="مصاريف مكتب" value={view.office} />
+          <WaterfallRow op="−" label="مصاريف منزل" value={view.home} />
+          <WaterfallRow label="صافي اليوم" value={view.net} strong tone={view.net >= 0 ? 'pos' : 'neg'} />
+        </GlassPanel>
+
+        <GlassPanel className="xl:col-span-1 overflow-hidden flex flex-col max-h-[420px]">
+          <h3 className="font-semibold text-ink mb-2 shrink-0">
+            حركات الترحيل ({movements.length})
+          </h3>
+          <div className="overflow-y-auto flex-1 -mx-1 px-1">
+            {movements.length === 0 ? (
+              <p className="text-sm text-ink-faint py-6 text-center">لا سيارات مُرحَّلة في هذا التاريخ</p>
+            ) : (
+              <table className="w-full text-xs">
+                <thead>
+                  <tr className="text-ink-faint border-b border-surface-border sticky top-0 bg-surface/90">
+                    <th className="text-right py-2">رقم</th>
+                    <th className="text-right py-2">تاجر</th>
+                    <th className="text-left py-2">إيراد</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {movements.map((m) => (
+                    <tr key={m.transaction_id} className="border-b border-surface-border/30 hover:bg-surface-hover">
+                      <td className="py-2">
+                        <Link to={`/shipments/${m.shipment_id}`} className="text-accent font-medium hover:underline">
+                          {m.ref_number}
+                        </Link>
+                      </td>
+                      <td className="py-2 text-ink-soft truncate max-w-[8rem]">{m.trader_name}</td>
+                      <td className="py-2 text-left tabular-nums font-medium">{formatCurrency(m.clearance_amount)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            )}
           </div>
-        </div>
+        </GlassPanel>
       </div>
 
-      {/* القسم الشهري */}
-      <div className="card space-y-5">
+      {payments.length > 0 && (
+        <GlassPanel>
+          <div className="flex items-center justify-between mb-3">
+            <h3 className="font-semibold text-ink">دفعات اليوم ({payments.length})</h3>
+            <Link to="/cash" className="text-xs text-accent hover:underline">
+              صفحة النقد ←
+            </Link>
+          </div>
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="text-ink-faint border-b border-surface-border">
+                  <th className="text-right py-2 px-2">مركز</th>
+                  <th className="text-left py-2 px-2">مبلغ</th>
+                  <th className="text-right py-2 px-2">فئة</th>
+                </tr>
+              </thead>
+              <tbody>
+                {payments.map((p) => (
+                  <tr key={p.id} className="border-b border-surface-border/40">
+                    <td className="py-2 px-2">
+                      {p.center_id ? (
+                        <Link to={`/centers/${p.center_id}`} className="text-accent hover:underline">
+                          {p.center_name}
+                        </Link>
+                      ) : (
+                        '—'
+                      )}
+                    </td>
+                    <td className="py-2 px-2 text-left tabular-nums">{formatCurrency(p.amount_usd)}</td>
+                    <td className="py-2 px-2 text-ink-faint">{p.category || '—'}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </GlassPanel>
+      )}
+
+      <GlassPanel className="space-y-5">
         <div className="flex items-center justify-between gap-4 flex-wrap">
-          <h3 className="font-semibold text-ink">ملخص شهر {MONTHS_AR[parseInt(month, 10) - 1]} {year}</h3>
+          <h3 className="font-semibold text-ink">
+            ملخص شهر {MONTHS_AR[parseInt(month, 10) - 1]} {year}
+          </h3>
           <div className="flex items-center gap-2">
-            <button type="button" className="btn-secondary !py-1.5 !px-2.5" onClick={() => setDate(shiftMonth(date, -1))}>‹ السابق</button>
-            <button type="button" className="btn-secondary !py-1.5 !px-2.5" onClick={() => setDate(shiftMonth(date, 1))}>التالي ›</button>
+            <button type="button" className="btn-secondary !py-1.5 !px-2.5" onClick={() => setDate(shiftMonth(date, -1))}>
+              ‹ السابق
+            </button>
+            <button type="button" className="btn-secondary !py-1.5 !px-2.5" onClick={() => setDate(shiftMonth(date, 1))}>
+              التالي ›
+            </button>
           </div>
         </div>
 
@@ -277,12 +584,10 @@ export default function ProfitPage() {
               <MiniStat label="إجمالي الإيراد" value={monthly.gross_profit} />
               <MiniStat label="عدد السيارات" value={monthly.num_trucks} plain />
             </div>
-
-            <div className="text-ink">
-              <p className="text-xs text-ink-faint mb-1">صافي الربح لكل يوم (انقر عموداً لفتح اليوم)</p>
+            <div>
+              <p className="text-xs text-ink-faint mb-1">صافي الربح لكل يوم (انقر عموداً)</p>
               <MonthlyBarChart days={monthly.days} selected={date} onPick={setDate} />
             </div>
-
             <div className="overflow-x-auto">
               <table className="w-full text-sm">
                 <thead>
@@ -304,25 +609,40 @@ export default function ProfitPage() {
                       <td className="py-2 px-2">{formatDate(d.date)}</td>
                       <td className="py-2 px-2">{d.num_trucks}</td>
                       <td className="py-2 px-2 text-left tabular-nums">{formatCurrency(d.gross_profit)}</td>
-                      <td className="py-2 px-2 text-left tabular-nums text-ink-faint">{formatCurrency(n(d.office_expenses) + n(d.home_expenses))}</td>
-                      <td className={`py-2 px-2 text-left tabular-nums font-semibold ${d.net_profit >= 0 ? 'text-success' : 'text-danger'}`}>{formatCurrency(d.net_profit)}</td>
+                      <td className="py-2 px-2 text-left tabular-nums text-ink-faint">
+                        {formatCurrency(n(d.office_expenses) + n(d.home_expenses))}
+                      </td>
+                      <td
+                        className={`py-2 px-2 text-left tabular-nums font-semibold ${d.net_profit >= 0 ? 'text-success' : 'text-danger'}`}
+                      >
+                        {formatCurrency(d.net_profit)}
+                      </td>
                     </tr>
                   ))}
                 </tbody>
               </table>
             </div>
-
             {monthly.best_day && (
               <div className="flex flex-wrap gap-4 text-xs text-ink-faint">
-                <span>أفضل يوم: <span className="text-success font-semibold">{formatDate(monthly.best_day.date)} ({formatCurrency(monthly.best_day.net_profit)})</span></span>
-                <span>أضعف يوم: <span className="text-danger font-semibold">{formatDate(monthly.worst_day.date)} ({formatCurrency(monthly.worst_day.net_profit)})</span></span>
+                <span>
+                  أفضل يوم:{' '}
+                  <span className="text-success font-semibold">
+                    {formatDate(monthly.best_day.date)} ({formatCurrency(monthly.best_day.net_profit)})
+                  </span>
+                </span>
+                <span>
+                  أضعف يوم:{' '}
+                  <span className="text-danger font-semibold">
+                    {formatDate(monthly.worst_day.date)} ({formatCurrency(monthly.worst_day.net_profit)})
+                  </span>
+                </span>
               </div>
             )}
           </>
         ) : (
           <p className="text-ink-faint text-sm py-6 text-center">لا أيام مُغلقة في هذا الشهر بعد</p>
         )}
-      </div>
+      </GlassPanel>
     </div>
   )
 }
@@ -330,7 +650,7 @@ export default function ProfitPage() {
 function MiniStat({ label, value, tone, plain }) {
   const color = tone === 'success' ? 'text-success' : 'text-ink'
   return (
-    <div className="rounded-lg bg-surface-hover px-3 py-2.5">
+    <div className="rounded-xl bg-surface-hover/80 px-3 py-2.5 border border-surface-border/40">
       <p className="text-[11px] text-ink-faint mb-1">{label}</p>
       <p className={`text-base font-bold tabular-nums ${color}`}>
         {plain ? Number(value || 0).toLocaleString('en-US') : formatCurrency(value)}

@@ -17,4 +17,5 @@ module.exports = {
   DB_PATH: process.env.DB_PATH || './data/hamoud.db',
   JWT_SECRET,
   JWT_EXPIRES_IN: process.env.JWT_EXPIRES_IN || '7d',
+  CORS_ORIGINS: process.env.CORS_ORIGINS || '',
 }

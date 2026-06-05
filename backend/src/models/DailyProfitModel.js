@@ -23,6 +23,18 @@ class DailyProfitModel extends BaseModel {
       .all(`${prefix}%`)
   }
 
+  /** أيام مُغلقة ضمن فترة (شامل الطرفين) — مرتبطة بتاريخ الإغلاق المحفوظ */
+  listByRange(from, to) {
+    return this.db
+      .prepare(
+        `SELECT date, num_trucks, gross_profit, office_expenses, home_expenses, net_profit
+         FROM daily_profit
+         WHERE is_deleted = 0 AND date >= ? AND date <= ?
+         ORDER BY date ASC`
+      )
+      .all(from, to)
+  }
+
   sumMonthly(year, month) {
     const prefix = `${year}-${String(month).padStart(2, '0')}`
     return this.db

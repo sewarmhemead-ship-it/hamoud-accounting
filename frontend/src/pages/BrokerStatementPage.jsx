@@ -70,19 +70,19 @@ export default function BrokerStatementPage() {
       />
 
       {!centerId && (
-        <div className="card text-center text-gray-500 py-10">
+        <div className="card text-center text-ink-soft py-10">
           اختر مخلصاً لعرض كشفه
         </div>
       )}
 
-      {centerId && isLoading && <p className="text-gray-500">جاري التحميل...</p>}
+      {centerId && isLoading && <p className="text-ink-soft">جاري التحميل...</p>}
 
       {stmt && (
         <div className="space-y-5">
           {/* بطاقات الرصيد و WIP */}
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             <div className="card">
-              <p className="text-xs text-gray-500 mb-1">الرصيد ({stmt.totals.direction})</p>
+              <p className="text-xs text-ink-soft mb-1">الرصيد ({stmt.totals.direction})</p>
               <p
                 className={`text-2xl font-bold ${
                   stmt.totals.we_owe ? 'text-danger' : 'text-success'
@@ -90,19 +90,19 @@ export default function BrokerStatementPage() {
               >
                 {formatCurrency(stmt.totals.abs_balance)}
               </p>
-              <p className="text-xs text-gray-600 mt-1">
+              <p className="text-xs text-ink-faint mt-1">
                 مجموع {formatCurrency(stmt.totals.charges_posted)} − دفعات{' '}
                 {formatCurrency(stmt.totals.payments_total)}
               </p>
             </div>
 
             <div className="card">
-              <p className="text-xs text-gray-500 mb-1">قابلة للترحيل</p>
+              <p className="text-xs text-ink-soft mb-1">قابلة للترحيل</p>
               <p className="text-2xl font-bold text-accent">
                 {stmt.wip.postable.count}{' '}
-                <span className="text-sm text-gray-500 font-normal">سيارة</span>
+                <span className="text-sm text-ink-soft font-normal">سيارة</span>
               </p>
-              <p className="text-xs text-gray-600 mt-1">
+              <p className="text-xs text-ink-faint mt-1">
                 {formatCurrency(stmt.wip.postable.total)}
               </p>
               <button
@@ -116,12 +116,12 @@ export default function BrokerStatementPage() {
             </div>
 
             <div className="card">
-              <p className="text-xs text-gray-500 mb-1">غير مكتملة</p>
+              <p className="text-xs text-ink-soft mb-1">غير مكتملة</p>
               <p className="text-2xl font-bold text-warning">
                 {stmt.wip.incomplete.count}{' '}
-                <span className="text-sm text-gray-500 font-normal">سيارة</span>
+                <span className="text-sm text-ink-soft font-normal">سيارة</span>
               </p>
-              <p className="text-xs text-gray-600 mt-1">
+              <p className="text-xs text-ink-faint mt-1">
                 ينقصها أقلام إلزامية — لا تُرحَّل
               </p>
             </div>
@@ -137,7 +137,7 @@ export default function BrokerStatementPage() {
                     <Link to={`/shipments/${r.id}`} className="text-accent hover:underline">
                       {r.ref_number} — {r.goods_name || '—'}
                     </Link>
-                    <span className="text-gray-500 text-xs">
+                    <span className="text-ink-soft text-xs">
                       ينقص: {r.missing.join('، ')}
                     </span>
                   </div>
@@ -148,9 +148,9 @@ export default function BrokerStatementPage() {
 
           {/* الكشف على نمط Excel */}
           <div className="card overflow-x-auto p-0">
-            <table className="w-full text-sm whitespace-nowrap">
+            <table className="data-table w-full text-sm whitespace-nowrap">
               <thead>
-                <tr className="text-gray-500 border-b border-surface-border bg-surface/50">
+                <tr>
                   <th className="py-3 px-3 text-right">م</th>
                   <th className="py-3 px-3 text-right">التاريخ</th>
                   <th className="py-3 px-3 text-right">البيان</th>
@@ -169,7 +169,7 @@ export default function BrokerStatementPage() {
                   <tr>
                     <td
                       colSpan={5 + cols.length + (hasTrader ? 1 : 0)}
-                      className="py-8 text-center text-gray-500"
+                      className="py-8 text-center text-ink-soft"
                     >
                       لا توجد سيارات مُرحَّلة أو دفعات بعد
                     </td>
@@ -178,11 +178,9 @@ export default function BrokerStatementPage() {
                 {rows.map((r, i) => (
                   <tr
                     key={`${r.kind}-${r.id ?? i}`}
-                    className={`border-b border-surface-border/50 hover:bg-surface-hover/50 ${
-                      r.kind === 'payment' ? 'bg-success/5' : ''
-                    }`}
+                    className={r.kind === 'payment' ? 'bg-success/5' : ''}
                   >
-                    <td className="py-2.5 px-3 text-right text-gray-500">{i + 1}</td>
+                    <td className="py-2.5 px-3 text-right text-ink-soft">{i + 1}</td>
                     <td className="py-2.5 px-3 text-right">{formatDate(r.date)}</td>
                     <td className="py-2.5 px-3 text-right">
                       {r.kind === 'truck' ? (
@@ -193,16 +191,16 @@ export default function BrokerStatementPage() {
                           {r.goods_name || r.ref_number}
                         </Link>
                       ) : (
-                        <span className="text-gray-300">{r.label}</span>
+                        <span className="text-ink">{r.label}</span>
                       )}
                     </td>
                     {hasTrader && (
-                      <td className="py-2.5 px-3 text-right text-gray-400">
+                      <td className="py-2.5 px-3 text-right text-ink-soft">
                         {r.kind === 'truck' ? r.trader || '—' : ''}
                       </td>
                     )}
                     {cols.map((c) => (
-                      <td key={c.key} className="py-2.5 px-3 text-left text-gray-300">
+                      <td key={c.key} className="py-2.5 px-3 text-left text-ink">
                         {r.kind === 'truck' && r.costs[c.key]
                           ? formatCurrency(r.costs[c.key])
                           : ''}

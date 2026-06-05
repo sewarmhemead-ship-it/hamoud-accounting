@@ -2,6 +2,7 @@ const { migrate } = require('../migrate')
 const { seedCurrencies } = require('./currencies')
 const { seedBorders } = require('./borders')
 const { seedGoodsTypes } = require('./goods_types')
+const { seedCenters } = require('./centers')
 const { seedUsers } = require('./users')
 
 async function runSeeds() {
@@ -9,6 +10,7 @@ async function runSeeds() {
   seedCurrencies()
   seedBorders()
   seedGoodsTypes()
+  seedCenters()
   await seedUsers()
   console.log('All seeds complete.')
 }

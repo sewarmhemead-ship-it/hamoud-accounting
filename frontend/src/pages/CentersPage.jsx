@@ -1,10 +1,14 @@
-import { useState } from 'react'
+import { useState, useMemo } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { Link } from 'react-router-dom'
 import { centersApi } from '../api'
 import CenterTypeBadge from '../components/CenterTypeBadge'
+import PageHeader from '../components/PageHeader'
 import { downloadBlob } from '../utils/download'
 import { useUiStore } from '../store/auth.store'
+import TableSearchBar from '../components/TableSearchBar'
+import { filterRowsBySearch } from '../utils/clientListFilter'
+import { CENTER_TYPES } from '../constants'
 
 function TraderExport({ center }) {
   const showToast = useUiStore((s) => s.showToast)
@@ -34,6 +38,8 @@ function TraderExport({ center }) {
 }
 
 export default function CentersPage() {
+  const [search, setSearch] = useState('')
+  const [typeFilter, setTypeFilter] = useState('')
   const [showForm, setShowForm] = useState(false)
   const [form, setForm] = useState({ name: '', type: 'trader', currency: 'USD' })
   const queryClient = useQueryClient()
@@ -55,16 +61,22 @@ export default function CentersPage() {
     onError: (err) => showToast(err.message, 'error'),
   })
 
-  const centers = data?.data || []
+  const centers = useMemo(() => {
+    let rows = data?.data || []
+    if (typeFilter) rows = rows.filter((c) => c.type === typeFilter)
+    return filterRowsBySearch(rows, search, ['code', 'name', 'type', 'currency'])
+  }, [data?.data, search, typeFilter])
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <h2 className="text-xl font-bold text-white">المراكز</h2>
-        <button type="button" className="btn-primary" onClick={() => setShowForm(!showForm)}>
-          {showForm ? 'إلغاء' : '+ مركز جديد'}
-        </button>
-      </div>
+      <PageHeader
+        title="المراكز"
+        actions={
+          <button type="button" className="btn-primary" onClick={() => setShowForm(!showForm)}>
+            {showForm ? 'إلغاء' : '+ مركز جديد'}
+          </button>
+        }
+      />
 
       {showForm && (
         <form
@@ -115,13 +127,33 @@ export default function CentersPage() {
         </form>
       )}
 
+      <TableSearchBar
+        search={search}
+        onSearchChange={setSearch}
+        onClear={() => { setSearch(''); setTypeFilter('') }}
+        placeholder="بحث: رمز، اسم، نوع..."
+        resultHint={`${centers.length} مركز`}
+        extra={
+          <select
+            value={typeFilter}
+            onChange={(e) => setTypeFilter(e.target.value)}
+            className="text-sm !py-1.5 w-36"
+          >
+            <option value="">كل الأنواع</option>
+            {Object.entries(CENTER_TYPES).map(([k, v]) => (
+              <option key={k} value={k}>{v.label}</option>
+            ))}
+          </select>
+        }
+      />
+
       {isLoading ? (
-        <p className="text-gray-500">جاري التحميل...</p>
+        <p className="text-ink-soft">جاري التحميل...</p>
       ) : (
         <div className="card overflow-x-auto">
-          <table className="w-full text-sm">
+          <table className="data-table w-full text-sm">
             <thead>
-              <tr className="text-gray-500 border-b border-surface-border">
+              <tr>
                 <th className="text-right py-3 px-2">الرمز</th>
                 <th className="text-right py-3 px-2">الاسم</th>
                 <th className="text-right py-3 px-2">النوع</th>
@@ -131,13 +163,13 @@ export default function CentersPage() {
             </thead>
             <tbody>
               {centers.map((c) => (
-                <tr key={c.id} className="border-b border-surface-border/50 hover:bg-surface-hover">
-                  <td className="py-3 px-2 text-gray-400">{c.code}</td>
-                  <td className="py-3 px-2 text-gray-200">{c.name}</td>
+                <tr key={c.id}>
+                  <td className="py-3 px-2 text-ink-soft">{c.code}</td>
+                  <td className="py-3 px-2 text-ink">{c.name}</td>
                   <td className="py-3 px-2">
                     <CenterTypeBadge type={c.type} />
                   </td>
-                  <td className="py-3 px-2 text-gray-400">{c.currency}</td>
+                  <td className="py-3 px-2 text-ink-soft">{c.currency}</td>
                   <td className="py-3 px-2">
                     <div className="flex items-center gap-3 justify-end">
                       {c.type === 'trader' && <TraderExport center={c} />}

@@ -1,7 +1,7 @@
-const { getDatabase } = require('../config/database')
 const ShipmentModel = require('../models/ShipmentModel')
 const TransactionModel = require('../models/TransactionModel')
 const { generateRef } = require('../utils/refGenerator')
+const { nowISO, todayDB } = require('../utils/dates')
 const { BusinessRuleError } = require('../utils/errors')
 const {
   SHIPMENT_REQUIRED_FIELDS,
@@ -12,14 +12,14 @@ const {
   CURRENCY,
 } = require('../config/constants')
 const {
-  calculateShipmentTotal,
-  calculateCostTotal,
-  calculatePriceTotal,
+  resolveTotalCost,
   COST_FIELDS,
   PRICE_FIELDS,
 } = require('../engine/clearance')
+const { classifyPostability } = require('../engine/statement')
 const { validateShipmentFinancials } = require('../engine/validation')
 const { round2 } = require('../engine/numbers')
+const { describeShipmentUpdate } = require('../utils/shipmentUpdateDisplay')
 
 const FINANCIAL_FIELDS = [
   'tarseem',
@@ -37,34 +37,18 @@ const FINANCIAL_FIELDS = [
 const DUAL_FIELDS = [...COST_FIELDS, ...PRICE_FIELDS]
 
 class ShipmentService {
-  calculateTotal(shipment) {
-    return calculateShipmentTotal(shipment)
-  }
-
-  checkCompletion(shipment) {
-    return SHIPMENT_REQUIRED_FIELDS.required.every(
-      (field) => shipment[field] !== null && shipment[field] !== undefined
-    )
-  }
-
-  getMissingFields(shipment) {
-    return SHIPMENT_REQUIRED_FIELDS.required
-      .filter((f) => shipment[f] === null || shipment[f] === undefined)
-      .map((f) => SHIPMENT_FIELD_LABELS[f] || f)
-  }
-
   getCompletionProgress(shipmentId) {
     const shipment = ShipmentModel.findById(shipmentId)
-    const missing = this.getMissingFields(shipment)
+    const { is_postable, missing } = classifyPostability(shipment)
     const required = SHIPMENT_REQUIRED_FIELDS.required.length
 
     return {
       required,
       filled: required - missing.length,
       missing,
-      is_complete: this.checkCompletion(shipment),
+      is_complete: is_postable,
       status: shipment.status,
-      total_cost: this.calculateTotal(shipment),
+      total_cost: resolveTotalCost(shipment).traderAmount,
     }
   }
 
@@ -112,14 +96,9 @@ class ShipmentService {
     // (مثال باب الهوى: المجموع = ترسيم + سائق + تخليص بدون أي إضافة).
     // يبقى tax_2pct حقلاً اختيارياً يُدخَل يدوياً عند الحاجة فقط.
 
-    // المجموع: عند المزدوج نعتمد فاتورة التاجر (price)، وإلا المجموع الكلاسيكي.
-    let total_cost = 0
-    if (hasDual) {
-      const priceTotal = calculatePriceTotal(dual)
-      total_cost = priceTotal || calculateCostTotal(dual)
-    } else if (Object.keys(financial).length) {
-      total_cost = this.calculateTotal({ ...financial, tarseem: financial.tarseem ?? null })
-    }
+    // المجموع — resolveTotalCost هو المصدر الوحيد لهذا القرار
+    const resolved = resolveTotalCost(hasDual ? dual : financial)
+    const total_cost = resolved.traderAmount
 
     const shipment = ShipmentModel.create({
       ref_number,
@@ -142,10 +121,10 @@ class ShipmentService {
       created_by: userId,
     })
 
-    if (this.checkCompletion(shipment)) {
+    if (classifyPostability(shipment).is_postable) {
       return ShipmentModel.update(shipment.id, {
         status: SHIPMENT_STATUS.COMPLETE,
-        completed_at: new Date().toISOString(),
+        completed_at: nowISO(),
         updated_by: userId,
       })
     }
@@ -154,7 +133,6 @@ class ShipmentService {
   }
 
   updateFields(shipmentId, fields, userId) {
-    const db = getDatabase()
     const shipment = ShipmentModel.findById(shipmentId)
 
     if (
@@ -169,7 +147,7 @@ class ShipmentService {
     const { _note, ...updates } = fields
     validateShipmentFinancials(updates)
 
-    const update = db.transaction(() => {
+    return ShipmentModel.transaction(() => {
       for (const [field, newValue] of Object.entries(updates)) {
         if (
           !FINANCIAL_FIELDS.includes(field) &&
@@ -190,30 +168,21 @@ class ShipmentService {
         }
       }
 
-      // لا إعادة احتساب لضريبة 2% — مدموجة في الترسيم (راجع createShipment)
-
-      // المجموع: عند وجود أعمدة مزدوجة نعتمد فاتورة التاجر (price)، وإلا الكلاسيكي.
       const merged = { ...shipment, ...updates }
-      const priceTotal = calculatePriceTotal(merged)
-      const costTotal = calculateCostTotal(merged)
-      const usesDual = priceTotal > 0 || costTotal > 0
-      updates.total_cost = usesDual
-        ? priceTotal || costTotal
-        : this.calculateTotal(merged)
+      updates.total_cost = resolveTotalCost(merged).traderAmount
       updates.updated_by = userId
 
       ShipmentModel.update(shipmentId, updates)
       const updated = ShipmentModel.findById(shipmentId)
+      const { is_postable } = classifyPostability(updated)
 
-      if (this.checkCompletion(updated)) {
-        if (updated.status === SHIPMENT_STATUS.PENDING) {
-          ShipmentModel.update(shipmentId, {
-            status: SHIPMENT_STATUS.COMPLETE,
-            completed_at: new Date().toISOString(),
-            updated_by: userId,
-          })
-        }
-      } else if (updated.status === SHIPMENT_STATUS.COMPLETE) {
+      if (is_postable && updated.status === SHIPMENT_STATUS.PENDING) {
+        ShipmentModel.update(shipmentId, {
+          status: SHIPMENT_STATUS.COMPLETE,
+          completed_at: nowISO(),
+          updated_by: userId,
+        })
+      } else if (!is_postable && updated.status === SHIPMENT_STATUS.COMPLETE) {
         ShipmentModel.update(shipmentId, {
           status: SHIPMENT_STATUS.PENDING,
           completed_at: null,
@@ -223,41 +192,27 @@ class ShipmentService {
 
       return ShipmentModel.findWithDetails(shipmentId)
     })
-
-    return update()
   }
 
   postShipment(shipmentId, userId) {
-    const db = getDatabase()
     const shipment = ShipmentModel.findById(shipmentId)
 
     if (shipment.status === SHIPMENT_STATUS.POSTED) {
       throw new BusinessRuleError('السيارة مُرحَّلة مسبقاً')
     }
-
     if (shipment.status === SHIPMENT_STATUS.DELIVERED) {
       throw new BusinessRuleError('السيارة مُسلَّمة مسبقاً')
     }
-
     if (shipment.status !== SHIPMENT_STATUS.COMPLETE) {
-      const missing = this.getMissingFields(shipment)
+      const { missing } = classifyPostability(shipment)
       throw new BusinessRuleError(
         `السيارة غير مكتملة. الأقلام الناقصة: ${missing.join('، ')}`
       )
     }
 
-    const post = db.transaction(() => {
+    return ShipmentModel.transaction(() => {
       const now = new Date().toISOString()
-
-      // الكشف المزدوج: ما نأخذه من التاجر (price_*) مقابل ما ندفعه للمخلص (cost_*).
-      // التوافق الخلفي: السيارات القديمة بلا أعمدة مزدوجة تعتمد المجموع الكلاسيكي.
-      const costTotal = calculateCostTotal(shipment)
-      const priceTotal = calculatePriceTotal(shipment)
-      const usesDual = costTotal > 0 || priceTotal > 0
-      const legacyTotal = this.calculateTotal(shipment)
-      const traderAmount = usesDual ? priceTotal : legacyTotal
-      const clearanceAmount = usesDual ? costTotal : legacyTotal
-
+      const { traderAmount, clearanceAmount } = resolveTotalCost(shipment)
       const noteBase = `تخليص ${shipment.goods_name || ''} ${shipment.source} → ${shipment.destination} - ${shipment.ref_number}`
 
       // قيد 1: على التاجر (مدين لنا بالفاتورة)
@@ -314,8 +269,6 @@ class ShipmentService {
         total: traderAmount,
       }
     })
-
-    return post()
   }
 
   bulkPost(shipmentIds, userId) {
@@ -334,23 +287,19 @@ class ShipmentService {
   }
 
   markDelivered(shipmentId, userId) {
-    const db = getDatabase()
     const shipment = ShipmentModel.findById(shipmentId)
 
     if (shipment.status !== SHIPMENT_STATUS.POSTED) {
       throw new BusinessRuleError('يجب ترحيل السيارة أولاً قبل تسجيل التسليم')
     }
 
-    const deliver = db.transaction(() => {
-      const deliveredAt = new Date().toISOString().split('T')[0]
-
+    return ShipmentModel.transaction(() => {
       ShipmentModel.update(shipmentId, {
         status: SHIPMENT_STATUS.DELIVERED,
-        delivered_at: deliveredAt,
+        delivered_at: todayDB(),
         updated_by: userId,
       })
 
-      // تسوية قيدَي الترحيل (التاجر + المخلص) إن وُجدا
       const txIds = [
         shipment.trader_transaction_id || shipment.transaction_id,
         shipment.clearance_transaction_id,
@@ -361,8 +310,6 @@ class ShipmentService {
 
       return ShipmentModel.findWithDetails(shipmentId)
     })
-
-    return deliver()
   }
 
   getPendingByBroker(brokerId, { limit = 50, offset = 0 } = {}) {
@@ -387,7 +334,7 @@ class ShipmentService {
     return {
       ...shipment,
       progress: this.getCompletionProgress(id),
-      updates: ShipmentModel.getUpdates(id),
+      updates: ShipmentModel.getUpdates(id).map(describeShipmentUpdate),
     }
   }
 }

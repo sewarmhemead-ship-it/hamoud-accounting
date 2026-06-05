@@ -3,6 +3,7 @@ const jwt = require('jsonwebtoken')
 const UserModel = require('../models/UserModel')
 const { UnauthorizedError } = require('../utils/errors')
 const { JWT_SECRET, JWT_EXPIRES_IN } = require('../config/env')
+const { buildWelcomeSession } = require('../utils/welcomeSession')
 
 class AuthService {
   async login(username, password) {
@@ -16,20 +17,29 @@ class AuthService {
       throw new UnauthorizedError('اسم المستخدم أو كلمة المرور غير صحيحة')
     }
 
+    const { ALL_PERMS } = require('../config/permissions')
+    const permissions = user.role === 'admin'
+      ? ALL_PERMS
+      : JSON.parse(user.permissions || '[]')
+
     const token = jwt.sign(
-      { id: user.id, username: user.username, role: user.role },
+      { id: user.id, username: user.username, role: user.role, permissions },
       JWT_SECRET,
       { expiresIn: JWT_EXPIRES_IN }
     )
 
+    const userPayload = {
+      id: user.id,
+      username: user.username,
+      name: user.name,
+      role: user.role,
+      permissions,
+    }
+
     return {
       token,
-      user: {
-        id: user.id,
-        username: user.username,
-        name: user.name,
-        role: user.role,
-      },
+      user: userPayload,
+      welcome: buildWelcomeSession(userPayload),
     }
   }
 

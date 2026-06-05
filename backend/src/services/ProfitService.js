@@ -112,6 +112,28 @@ class ProfitService {
   getByDate(date) {
     return DailyProfitModel.findByDate(date)
   }
+
+  /** تفاصيل اليوم للواجهة والتقارير — لا يغيّر المحرك */
+  getDayDetail(date) {
+    const preview = this.calculateDay(date)
+    const closed = this.getByDate(date)
+    const movements = TransactionModel.listPostedClearancesByDate(date)
+    const payments = TransactionModel.listPaymentsByDate(date)
+    const movements_total = movements.reduce(
+      (s, m) => s + (Number(m.clearance_amount) || 0),
+      0
+    )
+
+    return {
+      preview,
+      closed,
+      movements,
+      payments,
+      movements_total: Math.round(movements_total * 100) / 100,
+      payments_total: preview.payments_received,
+      is_closed: !!closed,
+    }
+  }
 }
 
 module.exports = new ProfitService()

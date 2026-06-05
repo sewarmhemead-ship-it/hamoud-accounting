@@ -1,10 +1,8 @@
 const { SHIPMENT_FIELD_LABELS } = require('../config/constants')
+const { COST_FIELD_LABELS, PRICE_FIELD_LABELS, COST_FIELDS, PRICE_FIELDS } = require('./clearance')
 const { CalculationError } = require('./errors')
 const { toFiniteNumber } = require('./numbers')
 
-/**
- * الحقول المالية التي يجب التحقق منها قبل الحفظ/الترحيل.
- */
 const VALIDATED_FINANCIAL_FIELDS = [
   'tarseem',
   'tax_2pct',
@@ -18,13 +16,12 @@ const VALIDATED_FINANCIAL_FIELDS = [
   'other_expenses',
 ]
 
+const VALIDATED_DUAL_FIELDS = [...COST_FIELDS, ...PRICE_FIELDS]
+
 /**
  * يتحقق أن كل قلم مالي مُدخل رقم منتهٍ غير سالب.
- * الأقلام الغائبة (null/undefined) مسموحة لأن السيارة قد تكون قيد الإكمال.
- * يرمي CalculationError عند أول قيمة غير صالحة.
- *
- * @param {object} data بيانات السيارة (أو تحديث جزئي)
- * @returns {true}
+ * يشمل الحقول الكلاسيكية والحقول المزدوجة (cost_* / price_*).
+ * الأقلام الغائبة (null/undefined) مسموحة — السيارة قد تكون قيد الإكمال.
  */
 function validateShipmentFinancials(data = {}) {
   if (data === null || typeof data !== 'object') {
@@ -33,8 +30,12 @@ function validateShipmentFinancials(data = {}) {
 
   for (const field of VALIDATED_FINANCIAL_FIELDS) {
     if (data[field] === null || data[field] === undefined) continue
-    const label = SHIPMENT_FIELD_LABELS[field] || field
-    // toFiniteNumber يرمي عند NaN/نص/سالب — وهو بالضبط ما نريد التحقق منه
+    toFiniteNumber(data[field], SHIPMENT_FIELD_LABELS[field] || field)
+  }
+
+  for (const field of VALIDATED_DUAL_FIELDS) {
+    if (data[field] === null || data[field] === undefined) continue
+    const label = COST_FIELD_LABELS[field] || PRICE_FIELD_LABELS[field] || field
     toFiniteNumber(data[field], label)
   }
 

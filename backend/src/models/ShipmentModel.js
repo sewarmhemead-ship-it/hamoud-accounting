@@ -1,4 +1,5 @@
 const BaseModel = require('./BaseModel')
+const { buildShipmentListFilters } = require('./shipmentListQuery')
 
 class ShipmentModel extends BaseModel {
   constructor() {
@@ -47,6 +48,44 @@ class ShipmentModel extends BaseModel {
     `
       )
       .get(centerId, ...statuses)
+  }
+
+  countOverdueWip(days = 7) {
+    return this.db
+      .prepare(
+        `SELECT COUNT(*) as count
+         FROM shipments
+         WHERE status IN ('pending','complete')
+           AND is_deleted = 0
+           AND date(entry_date) <= date('now', ?)`
+      )
+      .get(`-${days} days`).count
+  }
+
+  sumGlobalByStatus(status) {
+    return this.db
+      .prepare(
+        `SELECT COUNT(*) AS count, COALESCE(SUM(total_cost), 0) AS total
+         FROM shipments WHERE status = ? AND is_deleted = 0`
+      )
+      .get(status)
+  }
+
+  /** تجميع الشحنات حسب الحالة ضمن فترة تاريخ الدخول */
+  summarizeByStatusInRange(from, to) {
+    const rows = this.db
+      .prepare(
+        `SELECT status, COUNT(*) AS count, COALESCE(SUM(total_cost), 0) AS total
+         FROM shipments
+         WHERE is_deleted = 0 AND entry_date >= ? AND entry_date <= ?
+         GROUP BY status`
+      )
+      .all(from, to)
+    const byStatus = {}
+    for (const r of rows) {
+      byStatus[r.status] = { count: r.count, total: r.total }
+    }
+    return byStatus
   }
 
   sumByCenterAndStatus(centerId, status) {
@@ -106,24 +145,9 @@ class ShipmentModel extends BaseModel {
       .get(id)
   }
 
-  listWithDetails({ filters = {}, orderBy = 'entry_date DESC', limit = 50, offset = 0 } = {}) {
-    const conditions = ['s.is_deleted = 0']
-    const params = []
+  listWithDetails({ filters = {}, limit = 50, offset = 0 } = {}) {
+    const { joins, where, params } = buildShipmentListFilters(filters)
 
-    if (filters.center_id) {
-      conditions.push('s.center_id = ?')
-      params.push(filters.center_id)
-    }
-    if (filters.status) {
-      conditions.push('s.status = ?')
-      params.push(filters.status)
-    }
-    if (filters.clearance_center_id) {
-      conditions.push('s.clearance_center_id = ?')
-      params.push(filters.clearance_center_id)
-    }
-
-    const where = conditions.join(' AND ')
     const rows = this.db
       .prepare(
         `
@@ -132,10 +156,7 @@ class ShipmentModel extends BaseModel {
         c.name AS center_name,
         cb.name AS broker_name,
         b.name AS border_name
-      FROM shipments s
-      LEFT JOIN centers c ON c.id = s.center_id
-      LEFT JOIN centers cb ON cb.id = s.clearance_center_id
-      LEFT JOIN borders b ON b.id = s.border_id
+      ${joins}
       WHERE ${where}
       ORDER BY s.entry_date DESC
       LIMIT ? OFFSET ?
@@ -144,7 +165,13 @@ class ShipmentModel extends BaseModel {
       .all(...params, limit, offset)
 
     const { count: total } = this.db
-      .prepare(`SELECT COUNT(*) as count FROM shipments s WHERE ${where}`)
+      .prepare(
+        `
+      SELECT COUNT(*) AS count
+      ${joins}
+      WHERE ${where}
+    `
+      )
       .get(...params)
 
     return { rows, total, limit, offset }

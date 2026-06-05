@@ -1,3 +1,6 @@
+/** تحويل قيمة إلى رقم آمن (0 عند null/undefined/NaN) */
+export const parseNum = (v) => parseFloat(v) || 0
+
 export function formatCurrency(amount, currency = 'USD') {
   const num = Number(amount) || 0
   const formatted = num.toLocaleString('en-US', {

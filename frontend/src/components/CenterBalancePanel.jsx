@@ -20,7 +20,7 @@ export default function CenterBalancePanel({ balance, title = 'ملخص الذم
       label: 'قيد الإكمال (WIP)',
       value: balance.wip_value,
       desc: `${balance.wip_count} سيارة — pending + complete`,
-      color: 'text-gray-400',
+      color: 'text-ink-soft',
     },
     {
       label: 'إجمالي الذمة',
@@ -33,7 +33,7 @@ export default function CenterBalancePanel({ balance, title = 'ملخص الذم
 
   return (
     <div className="card">
-      <h3 className="font-semibold text-white mb-4">{title}</h3>
+      <h3 className="font-semibold text-ink mb-4">{title}</h3>
       <div className="space-y-3">
         {items.map((item) => (
           <div
@@ -43,10 +43,10 @@ export default function CenterBalancePanel({ balance, title = 'ملخص الذم
             }`}
           >
             <div>
-              <p className={`text-sm ${item.bold ? 'text-white font-medium' : 'text-gray-300'}`}>
+              <p className={`text-sm ${item.bold ? 'text-ink font-medium' : 'text-ink-soft'}`}>
                 {item.label}
               </p>
-              <p className="text-xs text-gray-600 mt-0.5">{item.desc}</p>
+              <p className="text-xs text-ink-faint mt-0.5">{item.desc}</p>
             </div>
             <span className={`font-mono ${item.color} ${item.bold ? 'text-lg font-bold' : ''}`}>
               {formatCurrency(item.value)}
@@ -54,7 +54,7 @@ export default function CenterBalancePanel({ balance, title = 'ملخص الذم
           </div>
         ))}
       </div>
-      <div className="mt-4 p-3 rounded-lg bg-surface text-xs text-gray-500">
+      <div className="mt-4 p-3 rounded-lg bg-surface text-xs text-ink-soft">
         WIP لا يدخل إجمالي الذمة — للمتابعة التشغيلية فقط
       </div>
     </div>
