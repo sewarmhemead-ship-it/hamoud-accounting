@@ -17,42 +17,21 @@ const explicitCorsOrigins = process.env.CORS_ORIGINS
 
 const devOrigins = ['http://localhost:5173', 'http://localhost:3001']
 
-function hostHeaderName(req) {
-  const raw = req.get('x-forwarded-host') || req.get('host') || ''
-  return String(raw).split(',')[0].trim().split(':')[0]
-}
+/**
+ * إنتاج موحّد (SPA + /api على نفس الخادم): لا CORS — same-origin فقط.
+ * CORS يُفعَّل فقط عند: تطوير (5173→3001) أو CORS_ORIGINS صريح (دومين خارجي).
+ */
+const needsApiCors =
+  process.env.NODE_ENV !== 'production' ||
+  !!explicitCorsOrigins ||
+  !servesSpa
 
-function isAllowedOrigin(origin, req) {
-  if (!origin) return true
-  if (process.env.NODE_ENV !== 'production') return true
-
-  const allowList = explicitCorsOrigins || devOrigins
-  if (allowList.includes(origin)) return true
-
-  // إنتاج موحّد (SPA + API): بدون CORS_ORIGINS صريح — اسمح بنفس النشر
-  if (!explicitCorsOrigins && servesSpa) return true
-
-  let originHost = ''
-  try {
-    originHost = new URL(origin).hostname
-  } catch {
-    return false
-  }
-
-  // Railway: Host غالباً domain:8080 بينما Origin بدون منفذ
-  if (hostHeaderName(req) === originHost) return true
-
-  const railwayDomain = process.env.RAILWAY_PUBLIC_DOMAIN
-  if (railwayDomain && originHost === railwayDomain) return true
-
-  return false
-}
-
-/** CORS لـ /api فقط — يحتاج req لمطابقة same-host في الإنتاج */
 function apiCors(req, res, next) {
+  const allowList = explicitCorsOrigins || devOrigins
   return cors({
     origin: (origin, cb) => {
-      if (isAllowedOrigin(origin, req)) return cb(null, true)
+      if (!origin) return cb(null, true)
+      if (allowList.includes(origin)) return cb(null, true)
       cb(new Error('CORS: الأصل غير مسموح به'))
     },
     credentials: true,
@@ -62,13 +41,14 @@ function apiCors(req, res, next) {
 app.use(express.json({ limit: '12mb' }))
 app.use(express.urlencoded({ extended: true, limit: '12mb' }))
 
-// Chrome DevTools يطلب هذا تلقائياً — نرد بـ 200 فارغ
 app.get('/.well-known/appspecific/com.chrome.devtools.json', (req, res) => res.json({}))
 
-// CORS على /api فقط — الملفات الثابتة (JS/CSS) تُقدَّم same-origin بلا CORS
-app.use('/api', apiCors, routes)
+if (needsApiCors) {
+  app.use('/api', apiCors, routes)
+} else {
+  app.use('/api', routes)
+}
 
-// في الإنتاج: نقدّم واجهة React المبنية (frontend/dist تُنسخ إلى backend/public)
 if (servesSpa) {
   app.use(express.static(publicDir))
   app.get('*', (req, res, next) => {
