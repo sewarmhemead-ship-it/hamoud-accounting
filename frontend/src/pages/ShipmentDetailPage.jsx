@@ -8,7 +8,9 @@ import PageHeader from '../components/PageHeader'
 import { DUAL_COST_FIELDS, DUAL_PRICE_FIELDS } from '../constants'
 import { formatCurrency, formatDate } from '../utils/format'
 import { describeShipmentUpdate } from '../utils/shipmentUpdateDisplay'
-import { useUiStore } from '../store/auth.store'
+import { getShipmentStage, SHIPMENT_STAGE_HINT } from '../constants'
+import { PERM } from '../constants/permissions'
+import { useAuthStore, useUiStore } from '../store/auth.store'
 
 const CLASSIC_FIELDS = [
   'tarseem',
@@ -30,6 +32,7 @@ export default function ShipmentDetailPage() {
   const [note, setNote] = useState('')
   const queryClient = useQueryClient()
   const showToast = useUiStore((s) => s.showToast)
+  const hasPermission = useAuthStore((s) => s.hasPermission)
 
   const { data, isLoading, refetch } = useQuery({
     queryKey: ['shipment', id],
@@ -88,10 +91,13 @@ export default function ShipmentDetailPage() {
   if (!s) return <p className="text-ink-faint">السيارة غير موجودة</p>
 
   const progress = s.progress || {}
-  const canEdit = s.status === 'pending' || s.status === 'complete'
-  const canPost = progress.is_complete && (s.status === 'pending' || s.status === 'complete')
-  const canDeliver = s.status === 'posted'
-  const canRemove = s.status === 'pending' || s.status === 'complete' || s.status === 'posted'
+  const stage = getShipmentStage(s.status)
+  const canEdit = stage === 'wip' && hasPermission(PERM.SHIPMENTS_EDIT)
+  const canPost =
+    stage === 'wip' && progress.is_complete && hasPermission(PERM.SHIPMENTS_POST)
+  const canDeliver = stage === 'posted' && hasPermission(PERM.SHIPMENTS_DELIVER)
+  const canRemove =
+    stage !== 'delivered' && hasPermission(PERM.SHIPMENTS_EDIT)
 
   // تحقق هل السيارة تستخدم نظام الكشف المزدوج
   const hasDual =
@@ -122,7 +128,7 @@ export default function ShipmentDetailPage() {
         <span className="text-ink w-24">
           {filled ? formatCurrency(s[field]) : '—'}
         </span>
-        {canEdit && (
+        {canEdit ? (
           <input
             type="number"
             step="0.01"
@@ -132,7 +138,7 @@ export default function ShipmentDetailPage() {
             value={editFields[field] ?? ''}
             onChange={(e) => setEditFields((f) => ({ ...f, [field]: e.target.value }))}
           />
-        )}
+        ) : null}
       </div>
     )
   }
@@ -154,7 +160,50 @@ export default function ShipmentDetailPage() {
         actions={<StatusBadge status={s.status} postable={progress.is_complete} />}
       />
 
-      <ShipmentLifecycle currentStatus={s.status} />
+      <ShipmentLifecycle currentStatus={s.status === 'complete' ? 'pending' : s.status} />
+
+      {stage === 'posted' && (
+        <div className="card border border-success/25 bg-success/5 space-y-3">
+          <p className="text-sm text-ink">
+            <span className="font-semibold text-success">مرحّلة</span>
+            {' — '}
+            {SHIPMENT_STAGE_HINT.posted}
+          </p>
+          {canDeliver ? (
+            <button
+              type="button"
+              className="btn-primary"
+              onClick={() => {
+                if (window.confirm('تسجيل تسليم السيارة وإدخال القيود برصيد التاجر؟')) {
+                  deliverMutation.mutate()
+                }
+              }}
+              disabled={deliverMutation.isPending}
+            >
+              {deliverMutation.isPending ? 'جاري التسجيل...' : '✓ تسجيل التسليم'}
+            </button>
+          ) : (
+            <p className="text-xs text-warning">ليس لديك صلاحية تسجيل التسليم — اطلب «تسليم السيارات» من المدير.</p>
+          )}
+        </div>
+      )}
+
+      {stage === 'delivered' && (
+        <div className="card border border-[#818cf8]/25 bg-[#6366f1]/5">
+          <p className="text-sm text-ink">
+            <span className="font-semibold text-[#818cf8]">مُسلّمة</span>
+            {' — '}
+            {SHIPMENT_STAGE_HINT.delivered}
+            {s.delivered_at && (
+              <span className="text-ink-faint"> · {formatDate(s.delivered_at)}</span>
+            )}
+          </p>
+        </div>
+      )}
+
+      {stage === 'wip' && (
+        <p className="text-xs text-ink-soft px-1">{SHIPMENT_STAGE_HINT.wip}</p>
+      )}
 
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
         <div className="card">
@@ -183,8 +232,8 @@ export default function ShipmentDetailPage() {
         </div>
       </div>
 
-      {/* Progress bar */}
-      <div className="card">
+      {/* Progress bar — معلقة فقط */}
+      {stage === 'wip' && <div className="card">
         <div className="flex justify-between text-sm mb-2">
           <span className="text-ink-soft">اكتمال الأقلام الإلزامية</span>
           <span className="text-ink">
@@ -202,7 +251,7 @@ export default function ShipmentDetailPage() {
             ناقص: {progress.missing.join('، ')}
           </p>
         )}
-      </div>
+      </div>}
 
       {/* حقول الكشف المزدوج */}
       {hasDual ? (
@@ -245,7 +294,7 @@ export default function ShipmentDetailPage() {
         </div>
       )}
 
-      {/* Actions */}
+      {/* Actions — معلقة: ترحيل | مرحّلة: التسليم في البطاقة أعلاه */}
       <div className="flex gap-3 flex-wrap">
         {canPost && (
           <button
@@ -255,16 +304,6 @@ export default function ShipmentDetailPage() {
             disabled={postMutation.isPending}
           >
             ترحيل لليوميات
-          </button>
-        )}
-        {canDeliver && (
-          <button
-            type="button"
-            className="btn-primary"
-            onClick={() => deliverMutation.mutate()}
-            disabled={deliverMutation.isPending}
-          >
-            تسجيل التسليم
           </button>
         )}
         {canRemove && (

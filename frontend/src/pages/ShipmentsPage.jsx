@@ -1,7 +1,10 @@
 import { useState, useCallback, useEffect } from 'react'
-import { useQuery } from '@tanstack/react-query'
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { Link, useSearchParams } from 'react-router-dom'
 import { shipmentsApi } from '../api'
+import { getShipmentStage } from '../constants'
+import { PERM } from '../constants/permissions'
+import { useAuthStore, useUiStore } from '../store/auth.store'
 import StatusBadge from '../components/StatusBadge'
 import ShipmentsListFilterBar from '../components/ShipmentsListFilterBar'
 import { useDebouncedValue } from '../hooks/useDebouncedValue'
@@ -20,6 +23,20 @@ export default function ShipmentsPage() {
   const [page,   setPage]     = useState(0)
   const debouncedRaw = useDebouncedValue(search, 350)
   const debouncedSearch = normalizeSearchQuery(debouncedRaw)
+  const queryClient = useQueryClient()
+  const showToast = useUiStore((s) => s.showToast)
+  const hasPermission = useAuthStore((s) => s.hasPermission)
+  const canDeliver = hasPermission(PERM.SHIPMENTS_DELIVER)
+
+  const deliverMutation = useMutation({
+    mutationFn: (id) => shipmentsApi.deliver(id),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['shipments-list'] })
+      queryClient.invalidateQueries({ queryKey: ['centers'] })
+      showToast('تم تسجيل التسليم', 'success')
+    },
+    onError: (err) => showToast(err.message, 'error'),
+  })
 
   // إعادة الصفحة للأول عند تغيير أي فلتر
   const setStatusP  = useCallback((v) => { setStatus(v);  setPage(0) }, [])
@@ -99,7 +116,7 @@ export default function ShipmentsPage() {
           <table className="w-full text-sm">
             <thead>
               <tr style={{ borderBottom: '1px solid rgba(255,255,255,0.06)' }}>
-                {['الرقم', 'التاجر', 'المخلص', 'البضاعة', 'المسار', 'الدخول', 'المجموع', 'الحالة'].map((h) => (
+                {['الرقم', 'التاجر', 'المخلص', 'البضاعة', 'المسار', 'الدخول', 'المجموع', 'الحالة', ...(status === 'posted' && canDeliver ? ['إجراء'] : [])].map((h) => (
                   <th key={h} className="text-right py-3 px-3 text-xs text-ink-faint font-medium">{h}</th>
                 ))}
               </tr>
@@ -107,7 +124,7 @@ export default function ShipmentsPage() {
             <tbody>
               {shipments.length === 0 ? (
                 <tr>
-                  <td colSpan={8} className="py-12 text-center text-ink-faint text-sm">
+                  <td colSpan={status === 'posted' && canDeliver ? 9 : 8} className="py-12 text-center text-ink-faint text-sm">
                     {hasActive ? 'لا توجد نتائج للبحث الحالي' : 'لا توجد سيارات'}
                   </td>
                 </tr>
@@ -127,7 +144,23 @@ export default function ShipmentsPage() {
                   </td>
                   <td className="py-2.5 px-3 text-ink-faint text-xs whitespace-nowrap">{formatDate(s.entry_date)}</td>
                   <td className="py-2.5 px-3 text-ink font-medium text-xs tabular-nums">{formatCurrency(s.total_cost || 0)}</td>
-                  <td className="py-2.5 px-3"><StatusBadge status={s.status} /></td>
+                  <td className="py-2.5 px-3"><StatusBadge status={s.status} postable={s.progress?.is_complete} /></td>
+                  {status === 'posted' && canDeliver && getShipmentStage(s.status) === 'posted' && (
+                    <td className="py-2.5 px-3">
+                      <button
+                        type="button"
+                        className="btn-primary !py-1 !px-2 text-[11px]"
+                        disabled={deliverMutation.isPending}
+                        onClick={() => {
+                          if (window.confirm(`تسجيل تسليم ${s.ref_number}؟`)) {
+                            deliverMutation.mutate(s.id)
+                          }
+                        }}
+                      >
+                        تسليم
+                      </button>
+                    </td>
+                  )}
                 </tr>
               ))}
             </tbody>

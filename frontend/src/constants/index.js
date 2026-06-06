@@ -54,6 +54,19 @@ export const SHIPMENT_STATUS = {
   delivered: { label: 'مُسلَّمة', color: 'bg-[#6366f115] text-[#818cf8]', icon: '✓' },
 }
 
+/** 3 مراحل تشغيلية: wip → posted → delivered (complete = wip) */
+export function getShipmentStage(status) {
+  if (status === 'posted') return 'posted'
+  if (status === 'delivered') return 'delivered'
+  return 'wip'
+}
+
+export const SHIPMENT_STAGE_HINT = {
+  wip: 'أكمل الأقلام ثم رحّل لليوميات',
+  posted: 'سجّل التسليم عند تسليم البضاعة للتاجر',
+  delivered: 'مُسلّمة — القيود دخلت رصيد التاجر',
+}
+
 export const TX_TYPE = {
   out: { label: 'قيد-ص', sign: '+', color: 'text-danger' },
   in: { label: 'قيد-و', sign: '-', color: 'text-success' },
