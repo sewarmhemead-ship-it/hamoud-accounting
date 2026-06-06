@@ -10,6 +10,7 @@ function isListFilterActive({ search = '', status = '', from = '', to = '' } = {
 function buildShipmentsListParams({
   search = '',
   status = '',
+  wip = false,
   from = '',
   to = '',
   limit = 25,
@@ -17,7 +18,7 @@ function buildShipmentsListParams({
 } = {}) {
   const q = String(search).trim()
   return {
-    ...(status ? { status } : {}),
+    ...(wip ? { wip: true } : status ? { status } : {}),
     ...(q ? { search: q } : {}),
     ...(from ? { from } : {}),
     ...(to ? { to } : {}),
@@ -82,6 +83,11 @@ describe('listFilters — لوحة التحكم / قائمة السيارات', 
     expect(buildShipmentsListParams({ search: '  فراس  ', status: 'complete' })).toEqual({
       search: 'فراس',
       status: 'complete',
+      limit: 25,
+      offset: 0,
+    })
+    expect(buildShipmentsListParams({ wip: true })).toEqual({
+      wip: true,
       limit: 25,
       offset: 0,
     })

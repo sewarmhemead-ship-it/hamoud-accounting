@@ -34,6 +34,10 @@ client.interceptors.response.use(
     }
     if (err.response?.status === 401) {
       useAuthStore.getState().logout()
+      const path = window.location.pathname || ''
+      if (!path.startsWith('/login')) {
+        window.location.replace('/login')
+      }
     }
     return Promise.reject({ message, code: data?.code, errors: data?.errors, status: err.response?.status })
   }

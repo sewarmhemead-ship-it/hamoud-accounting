@@ -147,6 +147,22 @@ export default function AdminSettingsTab() {
 
   const set = (key, value) => setForm((f) => ({ ...f, [key]: value }))
 
+  // وجهات النسخ (مصفوفة مسارات مجلدات يحددها المستخدم)
+  const destinations = Array.isArray(form?.backup_destinations) ? form.backup_destinations : []
+  const setDest = (i, val) =>
+    setForm((f) => {
+      const arr = [...(f.backup_destinations || [])]
+      arr[i] = val
+      return { ...f, backup_destinations: arr }
+    })
+  const addDest = () =>
+    setForm((f) => ({ ...f, backup_destinations: [...(f.backup_destinations || []), ''] }))
+  const removeDest = (i) =>
+    setForm((f) => ({
+      ...f,
+      backup_destinations: (f.backup_destinations || []).filter((_, idx) => idx !== i),
+    }))
+
   if (isLoading && !form) {
     return (
       <p className="text-ink-faint text-sm py-8 text-center">
@@ -201,7 +217,7 @@ export default function AdminSettingsTab() {
 
       <GlassPanel
         title="💾 النسخ الاحتياطي"
-        subtitle="ملف Excel ثابت يُستبدل كل مرة — مناسب للتجربة؛ للإنتاج انسخ الملف خارج الجهاز"
+        subtitle="نسخة قاعدة بيانات كاملة مؤرّخة تُحفظ في عدة مجلدات تحددها — مع تحقّق سلامة لكل نسخة"
       >
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <div className="sm:col-span-2 flex items-center gap-3">
@@ -239,6 +255,52 @@ export default function AdminSettingsTab() {
           </div>
         </div>
 
+        {/* وجهات النسخ — مجلدات يحددها المستخدم (قرص خارجي، OneDrive، شبكة) */}
+        <div className="mt-4 space-y-2">
+          <div className="flex items-center justify-between">
+            <label className="label text-xs !mb-0">📁 وجهات النسخ — تُنسخ إليها القاعدة الكاملة</label>
+            <span className="text-[10px] text-ink-faint">حد أقصى 5</span>
+          </div>
+          {destinations.length === 0 && (
+            <p className="text-xs text-ink-faint">
+              لا توجد وجهات إضافية — نسخة محلية فقط. أضف قرصاً خارجياً أو مجلد OneDrive/Google Drive للحماية الكاملة.
+            </p>
+          )}
+          {destinations.map((d, i) => (
+            <div key={i} className="flex items-center gap-2">
+              <input
+                value={d}
+                onChange={(e) => setDest(i, e.target.value)}
+                placeholder="مثال: D:\Backups  أو  C:\Users\you\OneDrive\hamoud"
+                dir="ltr"
+                className="flex-1 text-sm"
+              />
+              <button type="button" className="btn-danger !py-1.5 !px-2.5 text-xs" onClick={() => removeDest(i)}>
+                حذف
+              </button>
+            </div>
+          ))}
+          {destinations.length < 5 && (
+            <button type="button" className="btn-secondary !py-1.5 !px-3 text-xs" onClick={addDest}>
+              + إضافة وجهة
+            </button>
+          )}
+          <div className="flex items-center gap-2 pt-1">
+            <label className="label text-xs !mb-0">عدد النسخ المحفوظة بكل مجلد:</label>
+            <input
+              type="number"
+              min={1}
+              max={365}
+              value={form.backup_keep_copies ?? 30}
+              onChange={(e) => set('backup_keep_copies', Number(e.target.value))}
+              className="w-24 text-sm"
+            />
+          </div>
+          <p className="text-[10px] text-ink-faint">
+            احفظ الإعدادات أولاً، ثم اضغط «نسخ الآن» لاختبار الوجهات فعلياً.
+          </p>
+        </div>
+
         <div
           className="mt-4 rounded-xl px-3 py-3 text-xs text-ink-soft space-y-1"
           style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.06)' }}
@@ -267,6 +329,17 @@ export default function AdminSettingsTab() {
                     ? `${formatBytes(backupStatus.db_size)} — hamoud_accounting_backup.db`
                     : 'غير موجود'}
                 </p>
+              )}
+              {backupStatus?.last_destinations?.length > 0 && (
+                <div className="pt-1 space-y-0.5">
+                  <p className="font-semibold text-ink">الوجهات (آخر نسخة):</p>
+                  {backupStatus.last_destinations.map((d, i) => (
+                    <p key={i} dir="ltr" className={d.ok ? 'text-success' : 'text-danger'}>
+                      {d.ok ? '✓' : '✗'} {d.path}{' '}
+                      {d.ok ? `(${formatBytes(d.bytes)})` : `— ${d.error || 'فشل'}`}
+                    </p>
+                  ))}
+                </div>
               )}
               {backupStatus?.last_error && (
                 <p className="text-danger">خطأ: {backupStatus.last_error}</p>

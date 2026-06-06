@@ -87,6 +87,41 @@ describe('ربط السيارات والترحيل — تكامل', () => {
     expect(detail.tarseem).toBe(500)
   })
 
+  it('قائمة wip تشمل سيارات legacy complete وتُصلح progress من المزدوج', () => {
+    const truck = ShipmentService.createShipment(
+      {
+        center_id: ctx.traderId,
+        clearance_center_id: ctx.brokerId,
+        border_id: ctx.borderId,
+        goods_name: 'عدس',
+        source: 'تركيا',
+        destination: 'دمشق',
+        entry_date: ctx.testDate,
+        cost_tarseem: 300,
+        cost_clearance_fee: 40,
+        price_syrian_driver: 350,
+        price_tarseem: 320,
+      },
+      ctx.adminId
+    )
+    ctx.db
+      .prepare(
+        `UPDATE shipments SET status = 'complete', tarseem = NULL, syrian_driver = NULL, clearance_fee = NULL WHERE id = ?`
+      )
+      .run(truck.id)
+
+    const pendingOnly = ShipmentService.list({ status: 'pending' })
+    expect(pendingOnly.rows.some((r) => r.id === truck.id)).toBe(false)
+
+    const wip = ShipmentService.list({
+      status_in: ['pending', 'complete'],
+    })
+    const row = wip.rows.find((r) => r.id === truck.id)
+    expect(row).toBeTruthy()
+    expect(row.progress.is_complete).toBe(true)
+    expect(row.tarseem).toBe(300)
+  })
+
   it('قائمة WIP تُرجع progress.missing', () => {
     ShipmentService.createShipment(
       {

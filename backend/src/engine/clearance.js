@@ -1,4 +1,4 @@
-const { TAX_RATE, SHIPMENT_FIELD_LABELS } = require('../config/constants')
+const { SHIPMENT_FIELD_LABELS } = require('../config/constants')
 const { CalculationError } = require('./errors')
 const { toFiniteNumber, round2 } = require('./numbers')
 
@@ -38,24 +38,6 @@ function calculateShipmentTotal(shipment = {}) {
   }
 
   return round2(total)
-}
-
-/**
- * ضريبة 2% على الترسيم.
- * - عند تمرير قيمة صريحة (providedTax) تُستخدم كما هي (override يدوي) بعد التحقق.
- * - وإلا تُحتسب = الترسيم × 2%.
- *
- * @param {number|null|undefined} tarseem قيمة الترسيم
- * @param {number|null|undefined} [providedTax] قيمة ضريبة مُدخلة يدوياً (اختياري)
- * @returns {number} مبلغ الضريبة مقرّباً لمنزلتين
- */
-function calculateTax2Pct(tarseem, providedTax) {
-  if (providedTax !== null && providedTax !== undefined) {
-    return round2(toFiniteNumber(providedTax, SHIPMENT_FIELD_LABELS.tax_2pct))
-  }
-
-  const base = toFiniteNumber(tarseem, SHIPMENT_FIELD_LABELS.tarseem)
-  return round2(base * TAX_RATE)
 }
 
 /**
@@ -229,7 +211,6 @@ module.exports = {
   COST_FIELD_LABELS,
   PRICE_FIELD_LABELS,
   calculateShipmentTotal,
-  calculateTax2Pct,
   calculateCustomsFee,
   calculateCostTotal,
   calculatePriceTotal,

@@ -201,6 +201,7 @@ class TraderReportService {
       totals: {
         charges: full.totals.charges,
         payments: full.totals.payments,
+        offset_charges: full.totals.offset_charges,
         balance: full.totals.balance,
         shipments_count: full.totals.shipments_count,
       },

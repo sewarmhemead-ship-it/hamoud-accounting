@@ -10,6 +10,7 @@ export const PERM = {
   PAYMENTS_CREATE: 'payments_create',
   PAYMENTS_DELETE: 'payments_delete',
   OFFSET: 'offset',
+  TRANSACTIONS_EDIT: 'transactions_edit',
   PROFIT_VIEW: 'profit_view',
   PROFIT_CLOSE: 'profit_close',
   PROFIT_EDIT_CLOSED: 'profit_edit_closed',

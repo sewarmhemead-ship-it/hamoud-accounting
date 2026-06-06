@@ -96,7 +96,7 @@ export default function Layout() {
   })
   const badges = {
     wip: dashRes?.data?.shipments?.pending?.count || 0,
-    ready: dashRes?.data?.shipments?.ready_to_post?.count ?? dashRes?.data?.shipments?.complete?.count || 0,
+    ready: dashRes?.data?.shipments?.ready_to_post?.count ?? (dashRes?.data?.shipments?.complete?.count || 0),
   }
 
   useEffect(() => {

@@ -18,6 +18,7 @@ import { useAuthStore, useUiStore } from '../store/auth.store'
 import { downloadBlob } from '../utils/download'
 
 const DIFF_FIELDS = [
+  { key: 'clearance_diff', label: 'فرق تخليص' },
   { key: 'transport_diff', label: 'فرق نقل تركي' },
   { key: 'workers_diff', label: 'فرق عمال' },
   { key: 'driver_diff', label: 'فرق سائق سوري' },
@@ -180,6 +181,7 @@ export default function ProfitPage() {
         misc: budget.misc.length ? budget.misc : emptyExpenseState().misc,
       })
       setDiffs({
+        clearance_diff: String(closed.clearance_diff ?? ''),
         transport_diff: String(closed.transport_diff ?? ''),
         workers_diff: String(closed.workers_diff ?? ''),
         driver_diff: String(closed.driver_diff ?? ''),
@@ -189,7 +191,13 @@ export default function ProfitPage() {
     } else {
       setMemo('')
       setExpenseSections(emptyExpenseState())
-      setDiffs({ transport_diff: '', workers_diff: '', driver_diff: '', credit_diff: '' })
+      setDiffs({
+        clearance_diff: '',
+        transport_diff: '',
+        workers_diff: '',
+        driver_diff: '',
+        credit_diff: '',
+      })
     }
   }, [date, closed?.id, closed?.updated_at])
 
@@ -226,6 +234,7 @@ export default function ProfitPage() {
   }
 
   const buildPayload = () => ({
+    clearance_diff: n(diffs.clearance_diff),
     transport_diff: n(diffs.transport_diff),
     workers_diff: n(diffs.workers_diff),
     driver_diff: n(diffs.driver_diff),
@@ -240,7 +249,6 @@ export default function ProfitPage() {
       profitApi.close({
         date,
         num_trucks: preview?.num_trucks,
-        clearance_diff: 0,
         ...buildPayload(),
       }),
     onSuccess: () => {

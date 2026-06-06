@@ -3,6 +3,7 @@ import { useQuery } from '@tanstack/react-query'
 import { Link } from 'react-router-dom'
 import { centersApi } from '../api'
 import PageHeader from '../components/PageHeader'
+import ReportExportButtons from '../components/ReportExportButtons'
 import { formatCurrency, formatDate } from '../utils/format'
 
 function SideTable({ side, accent, field }) {
@@ -121,18 +122,26 @@ export default function DualStatementPage() {
         title="كشف مزدوج"
         subtitle="جانب المخلص (ما ندفعه) مقابل جانب التاجر (ما نأخذه) — ومنه مربح الشركة"
         actions={
-          <select
-            className="w-56"
-            value={centerId}
-            onChange={(e) => setCenterId(e.target.value)}
-          >
-            <option value="">— اختر المخلص —</option>
-            {brokers.map((b) => (
-              <option key={b.id} value={b.id}>
-                {b.name}
-              </option>
-            ))}
-          </select>
+          <div className="flex items-center gap-2 flex-wrap">
+            {stmt && (
+              <ReportExportButtons
+                filenameBase={`كشف_مزدوج_${stmt.clearance_center?.name || ''}`}
+                fetchBlob={(fmt) => centersApi.reportBlob(centerId, `dual.${fmt}`)}
+              />
+            )}
+            <select
+              className="w-56"
+              value={centerId}
+              onChange={(e) => setCenterId(e.target.value)}
+            >
+              <option value="">— اختر المخلص —</option>
+              {brokers.map((b) => (
+                <option key={b.id} value={b.id}>
+                  {b.name}
+                </option>
+              ))}
+            </select>
+          </div>
         }
       />
 

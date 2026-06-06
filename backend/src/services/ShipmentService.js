@@ -51,6 +51,22 @@ class ShipmentService {
     return ShipmentModel.findById(shipmentId)
   }
 
+  /** يصلّح legacy من المزدوج ويُرجع الصف مع progress محدّث */
+  _mapRowWithProgress(row) {
+    if (!row?.id) return row
+    this.repairLegacyFromDual(row.id)
+    const fresh = ShipmentModel.findById(row.id)
+    const { missing, is_postable } = classifyPostability(fresh)
+    return {
+      ...row,
+      tarseem: fresh.tarseem,
+      syrian_driver: fresh.syrian_driver,
+      clearance_fee: fresh.clearance_fee,
+      total_cost: fresh.total_cost ?? row.total_cost,
+      progress: { missing, is_complete: is_postable },
+    }
+  }
+
   getCompletionProgress(shipmentId) {
     this.repairLegacyFromDual(shipmentId)
     const shipment = ShipmentModel.findById(shipmentId)
@@ -338,10 +354,9 @@ class ShipmentService {
   }
 
   _filterPostable(rows) {
-    return rows.filter((row) => {
-      this.repairLegacyFromDual(row.id)
-      return classifyPostability(ShipmentModel.findById(row.id)).is_postable
-    })
+    return rows
+      .map((row) => this._mapRowWithProgress(row))
+      .filter((row) => row.progress.is_complete)
   }
 
   countReadyToPost() {
@@ -368,13 +383,7 @@ class ShipmentService {
       limit: 10_000,
       offset: 0,
     })
-    const postable = this._filterPostable(rows).map((row) => {
-      const { missing, is_postable } = classifyPostability(row)
-      return {
-        ...row,
-        progress: { missing, is_complete: is_postable },
-      }
-    })
+    const postable = this._filterPostable(rows)
     return {
       rows: postable.slice(offset, offset + limit),
       total: postable.length,
@@ -388,13 +397,7 @@ class ShipmentService {
     const result = ShipmentModel.listWithDetails({ filters: rest, limit, offset })
     return {
       ...result,
-      rows: result.rows.map((row) => {
-        const { missing, is_postable } = classifyPostability(row)
-        return {
-          ...row,
-          progress: { missing, is_complete: is_postable },
-        }
-      }),
+      rows: result.rows.map((row) => this._mapRowWithProgress(row)),
     }
   }
 

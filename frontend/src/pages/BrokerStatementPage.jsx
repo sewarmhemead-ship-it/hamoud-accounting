@@ -13,6 +13,20 @@ const STATE_BADGE = {
   delivered: 'bg-green-500/20 text-green-400',
 }
 
+function ledgerRowClass(kind) {
+  if (kind === 'payment' || kind === 'offset_payment') return 'bg-success/5'
+  if (kind === 'offset_charge') return 'bg-warning/5'
+  return ''
+}
+
+function isChargeLedgerRow(kind) {
+  return kind === 'truck' || kind === 'offset_charge'
+}
+
+function isPaymentLedgerRow(kind) {
+  return kind === 'payment' || kind === 'offset_payment'
+}
+
 export default function BrokerStatementPage() {
   const [centerId, setCenterId] = useState('')
   const queryClient = useQueryClient()
@@ -178,7 +192,7 @@ export default function BrokerStatementPage() {
                 {rows.map((r, i) => (
                   <tr
                     key={`${r.kind}-${r.id ?? i}`}
-                    className={r.kind === 'payment' ? 'bg-success/5' : ''}
+                    className={ledgerRowClass(r.kind)}
                   >
                     <td className="py-2.5 px-3 text-right text-ink-soft">{i + 1}</td>
                     <td className="py-2.5 px-3 text-right">{formatDate(r.date)}</td>
@@ -207,10 +221,12 @@ export default function BrokerStatementPage() {
                       </td>
                     ))}
                     <td className="py-2.5 px-3 text-left font-medium">
-                      {r.kind === 'truck' ? formatCurrency(r.total) : ''}
+                      {isChargeLedgerRow(r.kind)
+                        ? formatCurrency(r.kind === 'truck' ? r.total : r.amount)
+                        : ''}
                     </td>
                     <td className="py-2.5 px-3 text-left text-success">
-                      {r.kind === 'payment' ? formatCurrency(r.amount) : ''}
+                      {isPaymentLedgerRow(r.kind) ? formatCurrency(r.amount) : ''}
                     </td>
                   </tr>
                 ))}

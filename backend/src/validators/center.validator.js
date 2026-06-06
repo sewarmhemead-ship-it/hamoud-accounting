@@ -5,6 +5,7 @@ const createCenterSchema = z.object({
   name: z.string().min(1, 'الاسم مطلوب'),
   type: z.enum(['trader', 'broker', 'supplier', 'partner', 'fund', 'internal']),
   currency: z.enum(['USD', 'SYP', 'TRY']).default('USD'),
+  phone: z.string().trim().max(30).optional().nullable(),
   notes: z.string().optional(),
 })
 

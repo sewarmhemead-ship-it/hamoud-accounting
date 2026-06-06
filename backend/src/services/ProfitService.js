@@ -47,6 +47,7 @@ class ProfitService {
       manualGross ??
       calculateDailyGrossProfit({
         baseClearance,
+        clearance_diff,
         transport_diff,
         workers_diff,
         driver_diff,
@@ -77,7 +78,26 @@ class ProfitService {
       throw new BusinessRuleError('لا يوجد سجل لهذا اليوم')
     }
 
-    const gross = data.gross_profit ?? existing.gross_profit
+    const diffTouched =
+      data.clearance_diff !== undefined ||
+      data.transport_diff !== undefined ||
+      data.workers_diff !== undefined ||
+      data.driver_diff !== undefined ||
+      data.credit_diff !== undefined
+
+    let gross = data.gross_profit ?? existing.gross_profit
+    if (diffTouched && data.gross_profit === undefined) {
+      const calc = this.calculateDay(date)
+      gross = calculateDailyGrossProfit({
+        baseClearance: calc.gross_revenue,
+        clearance_diff: data.clearance_diff ?? existing.clearance_diff,
+        transport_diff: data.transport_diff ?? existing.transport_diff,
+        workers_diff: data.workers_diff ?? existing.workers_diff,
+        driver_diff: data.driver_diff ?? existing.driver_diff,
+        credit_diff: data.credit_diff ?? existing.credit_diff,
+      })
+    }
+
     const office = data.office_expenses ?? existing.office_expenses
     const home = data.home_expenses ?? existing.home_expenses
 

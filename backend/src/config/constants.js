@@ -66,8 +66,6 @@ const REF_PREFIX = {
 
 const REF_PAD = 5
 
-const TAX_RATE = 0.02
-
 const ALLOWED_ORDER = [
   'created_at DESC',
   'created_at ASC',
@@ -89,6 +87,5 @@ module.exports = {
   TX_CATEGORY,
   REF_PREFIX,
   REF_PAD,
-  TAX_RATE,
   ALLOWED_ORDER,
 }

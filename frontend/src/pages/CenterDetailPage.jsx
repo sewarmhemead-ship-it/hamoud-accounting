@@ -6,6 +6,7 @@ import BalanceCard from '../components/BalanceCard'
 import CenterBalancePanel from '../components/CenterBalancePanel'
 import PageHeader from '../components/PageHeader'
 import { formatCurrency, formatDate, todayISO } from '../utils/format'
+import { waLink, buildReminderText, toWaNumber } from '../utils/whatsapp'
 import { useUiStore } from '../store/auth.store'
 
 export default function CenterDetailPage() {
@@ -13,6 +14,8 @@ export default function CenterDetailPage() {
   const [showPayment, setShowPayment] = useState(false)
   const [payment, setPayment] = useState({ amount: '', currency: 'USD', exchange_rate: '', date: todayISO(), notes: '' })
   const [whatsappText, setWhatsappText] = useState(null)
+  const [editPhone, setEditPhone] = useState(false)
+  const [phoneVal, setPhoneVal] = useState('')
   const queryClient = useQueryClient()
   const showToast = useUiStore((s) => s.showToast)
 
@@ -29,6 +32,23 @@ export default function CenterDetailPage() {
   const { data: statementRes } = useQuery({
     queryKey: ['statement', id],
     queryFn: () => centersApi.statement(id, { limit: 30 }),
+  })
+
+  // نص كشف واتساب جاهز مسبقاً (ليكون رابط wa.me فورياً دون حظر النوافذ)
+  const { data: waRes } = useQuery({
+    queryKey: ['whatsapp-text', id],
+    queryFn: () => reportsApi.whatsapp(id),
+  })
+  const waText = waRes?.data?.text || ''
+
+  const phoneMutation = useMutation({
+    mutationFn: (phone) => centersApi.update(id, { phone }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['center', id] })
+      setEditPhone(false)
+      showToast('تم حفظ رقم الواتساب', 'success')
+    },
+    onError: (err) => showToast(err.message, 'error'),
   })
 
   const paymentMutation = useMutation({
@@ -89,6 +109,71 @@ export default function CenterDetailPage() {
             <BalanceCard title="وارد (in)" value={bal.total_in} variant="positive" />
           </div>
         )}
+      </div>
+
+      {/* ─── واتساب ─── */}
+      <div className="card space-y-3">
+        <div className="flex items-center justify-between flex-wrap gap-2">
+          <h3 className="font-semibold text-ink">📲 واتساب</h3>
+          {!editPhone && (
+            <button
+              type="button"
+              className="text-xs text-accent hover:underline"
+              onClick={() => { setPhoneVal(center.phone || ''); setEditPhone(true) }}
+            >
+              {center.phone ? 'تعديل الرقم' : '+ إضافة رقم'}
+            </button>
+          )}
+        </div>
+
+        {editPhone ? (
+          <div className="flex items-center gap-2 flex-wrap">
+            <input
+              value={phoneVal}
+              onChange={(e) => setPhoneVal(e.target.value)}
+              placeholder="مع رمز الدولة: 963944123456"
+              dir="ltr"
+              className="w-60"
+            />
+            <button
+              type="button"
+              className="btn-success !py-1.5 !px-3 text-xs"
+              onClick={() => phoneMutation.mutate(phoneVal.trim())}
+              disabled={phoneMutation.isPending}
+            >
+              حفظ
+            </button>
+            <button type="button" className="btn-secondary !py-1.5 !px-3 text-xs" onClick={() => setEditPhone(false)}>
+              إلغاء
+            </button>
+          </div>
+        ) : center.phone ? (
+          <p className="text-sm text-ink-soft" dir="ltr">📞 {center.phone}</p>
+        ) : (
+          <p className="text-sm text-ink-faint">لا يوجد رقم — أضف رقماً لإرسال الكشف والتذكير عبر واتساب</p>
+        )}
+
+        <div className="flex items-center gap-2 flex-wrap">
+          <a
+            href={waLink(center.phone, waText)}
+            target="_blank"
+            rel="noopener noreferrer"
+            className={`btn-success !py-1.5 !px-3 text-sm ${!waText ? 'pointer-events-none opacity-50' : ''}`}
+          >
+            📲 إرسال الكشف
+          </a>
+          <a
+            href={waLink(center.phone, buildReminderText(center, bal))}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="btn-secondary !py-1.5 !px-3 text-sm"
+          >
+            📲 تذكير بالرصيد
+          </a>
+          {!center.phone && (
+            <span className="text-xs text-ink-faint">بدون رقم سيفتح واتساب لتختار المستلم يدوياً</span>
+          )}
+        </div>
       </div>
 
       {showPayment && (

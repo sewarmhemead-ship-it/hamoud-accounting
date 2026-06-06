@@ -16,10 +16,14 @@ const DEFAULT_APP_SETTINGS = {
   notification_high_balance_usd: 50000,
   /** تلميح عند إنشاء سيارة جديدة فقط — لا يُعاد حساب سيارات قديمة */
   default_service_fee_usd: 30,
-  /** نسخ احتياطي تلقائي — ملف Excel ثابت يُستبدل كل مرة (انظر BackupService) */
+  /** نسخ احتياطي تلقائي — نسخة قاعدة بيانات كاملة مؤرّخة (انظر BackupService) */
   backup_auto_enabled: false,
   backup_interval_hours: 0.5,
   backup_include_db: true,
+  /** مجلدات وجهة إضافية ينسخ إليها المستخدم (قرص خارجي، OneDrive، شبكة...) */
+  backup_destinations: [],
+  /** عدد النسخ المؤرّخة المحفوظة في كل مجلد (سياسة الاحتفاظ) */
+  backup_keep_copies: 30,
 }
 
 const NUMERIC_KEYS = new Set([
@@ -28,9 +32,14 @@ const NUMERIC_KEYS = new Set([
   'notification_high_balance_usd',
   'default_service_fee_usd',
   'backup_interval_hours',
+  'backup_keep_copies',
 ])
 
 const BOOLEAN_KEYS = new Set(['backup_auto_enabled', 'backup_include_db'])
+
+const ARRAY_KEYS = new Set(['backup_destinations'])
+
+const MAX_DESTINATIONS = 5
 
 const STRING_KEYS = new Set([
   'company_name_ar',
@@ -42,7 +51,30 @@ const STRING_KEYS = new Set([
   'company_address',
 ])
 
-const ALL_KEYS = [...STRING_KEYS, ...NUMERIC_KEYS, ...BOOLEAN_KEYS]
+const ALL_KEYS = [...STRING_KEYS, ...NUMERIC_KEYS, ...BOOLEAN_KEYS, ...ARRAY_KEYS]
+
+/** يطبّع قائمة مجلدات الوجهة: نصوص غير فارغة، منزوعة التكرار، بحد أقصى. */
+function normalizeDestinations(raw) {
+  let arr = raw
+  if (typeof arr === 'string') {
+    try {
+      arr = JSON.parse(arr)
+    } catch {
+      arr = arr.split('\n')
+    }
+  }
+  if (!Array.isArray(arr)) return []
+  const seen = new Set()
+  const out = []
+  for (const item of arr) {
+    const p = String(item ?? '').trim()
+    if (!p || seen.has(p)) continue
+    seen.add(p)
+    out.push(p)
+    if (out.length >= MAX_DESTINATIONS) break
+  }
+  return out
+}
 
 function mergeSettings(stored = {}) {
   const out = { ...DEFAULT_APP_SETTINGS }
@@ -53,6 +85,8 @@ function mergeSettings(stored = {}) {
     } else if (NUMERIC_KEYS.has(key)) {
       const n = Number(stored[key])
       if (Number.isFinite(n)) out[key] = n
+    } else if (ARRAY_KEYS.has(key)) {
+      out[key] = normalizeDestinations(stored[key])
     } else if (typeof stored[key] === 'string') {
       out[key] = stored[key].trim()
     }
@@ -77,6 +111,15 @@ function validateSettingsPatch(patch) {
       next[key] = raw === true || raw === 'true' || raw === 1 || raw === '1'
       continue
     }
+    if (ARRAY_KEYS.has(key)) {
+      const dests = normalizeDestinations(raw)
+      if (dests.some((d) => d.length > 500)) {
+        errors.push(`${key}: مسار طويل جداً`)
+        continue
+      }
+      next[key] = dests
+      continue
+    }
     if (NUMERIC_KEYS.has(key)) {
       const n = Number(raw)
       if (!Number.isFinite(n) || n < 0) {
@@ -98,6 +141,14 @@ function validateSettingsPatch(patch) {
       }
       if (key.includes('days') && (n < 1 || n > 365)) {
         errors.push(`${key}: بين 1 و 365 يوماً`)
+        continue
+      }
+      if (key === 'backup_keep_copies') {
+        if (n < 1 || n > 365) {
+          errors.push(`${key}: بين 1 و 365 نسخة`)
+          continue
+        }
+        next[key] = Math.round(n)
         continue
       }
       if (key === 'default_service_fee_usd' && n > 10_000) {

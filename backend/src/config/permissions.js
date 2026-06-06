@@ -16,6 +16,8 @@ const PERM = {
   PAYMENTS_CREATE:   'payments_create',
   PAYMENTS_DELETE:   'payments_delete',
   OFFSET:            'offset',
+  /** تعديل أي حركة مالية مسجّلة — للمدير غالباً (admin يملكها تلقائياً) */
+  TRANSACTIONS_EDIT: 'transactions_edit',
   // ─── المالية ───
   PROFIT_VIEW:        'profit_view',
   PROFIT_CLOSE:       'profit_close',
@@ -52,6 +54,7 @@ const PERM_GROUPS = [
       { key: PERM.PAYMENTS_CREATE, label: 'تسجيل دفعات' },
       { key: PERM.PAYMENTS_DELETE, label: 'حذف دفعات' },
       { key: PERM.OFFSET,          label: 'إجراء مقاصة بين مركزين' },
+      { key: PERM.TRANSACTIONS_EDIT, label: 'تعديل الحركات (مدير)' },
     ],
   },
   {

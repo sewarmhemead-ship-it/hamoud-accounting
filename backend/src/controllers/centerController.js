@@ -3,8 +3,9 @@ const AccountingService = require('../services/AccountingService')
 const BrokerStatementService = require('../services/BrokerStatementService')
 const DualStatementService = require('../services/DualStatementService')
 const TraderReportService = require('../services/TraderReportService')
-const { traderWorkbook, profitWorkbook, workbookToBuffer } = require('../services/reports/excelReport')
-const { traderHtml, profitHtml, htmlToPdf } = require('../services/reports/pdfReport')
+const SettingsService = require('../services/SettingsService')
+const { traderWorkbook, profitWorkbook, dualStatementWorkbook, workbookToBuffer } = require('../services/reports/excelReport')
+const { traderHtml, profitHtml, dualStatementHtml, htmlToPdf } = require('../services/reports/pdfReport')
 const archiver = require('archiver')
 const apiResponse = require('../utils/apiResponse')
 const asyncHandler = require('../utils/asyncHandler')
@@ -100,6 +101,37 @@ const centerController = {
     const id = parseInt(req.params.id, 10)
     const statement = DualStatementService.getStatement(id)
     res.json(apiResponse.success(statement))
+  }),
+
+  // بيانات تقرير الكشف المزدوج جاهزة للتصدير (Excel / PDF)
+  _buildDualReportData(id) {
+    const stmt = DualStatementService.getStatement(id)
+    return {
+      company: SettingsService.getReportCompanyName(),
+      center: stmt.clearance_center,
+      range: {},
+      generated_at: new Date().toISOString(),
+      broker_side: stmt.broker_side,
+      trader_side: stmt.trader_side,
+      company_profit: stmt.company_profit,
+    }
+  },
+
+  dualStatementXlsx: asyncHandler(async (req, res) => {
+    const data = centerController._buildDualReportData(parseInt(req.params.id, 10))
+    const buf = await workbookToBuffer(dualStatementWorkbook(data))
+    sendDownload(
+      res,
+      buf,
+      `كشف_مزدوج_${data.center.name}.xlsx`,
+      'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+    )
+  }),
+
+  dualStatementPdf: asyncHandler(async (req, res) => {
+    const data = centerController._buildDualReportData(parseInt(req.params.id, 10))
+    const buf = await htmlToPdf(dualStatementHtml(data))
+    sendDownload(res, buf, `كشف_مزدوج_${data.center.name}.pdf`, 'application/pdf')
   }),
 
   // ===== تقارير التجار (Excel / PDF) =====

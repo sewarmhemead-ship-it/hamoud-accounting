@@ -137,9 +137,10 @@ export default function TraderReportsPage() {
             </div>
             {trader && (
               <>
-                <div className="grid grid-cols-3 gap-3 text-center">
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-center">
                   <div className="stat-card tone-blue"><p className="text-[11px] text-ink-faint mb-1">الفواتير</p><p className="text-lg font-bold text-info">{formatCurrency(trader.totals.charges)}</p></div>
                   <div className="stat-card tone-green"><p className="text-[11px] text-ink-faint mb-1">الدفعات</p><p className="text-lg font-bold text-success">{formatCurrency(trader.totals.payments)}</p></div>
+                  <div className="stat-card tone-red"><p className="text-[11px] text-ink-faint mb-1">مقاصة</p><p className="text-lg font-bold text-warning">{formatCurrency(trader.totals.offset_charges || 0)}</p></div>
                   <div className="stat-card tone-gold"><p className="text-[11px] text-ink-faint mb-1">الرصيد</p><p className="text-lg font-bold text-accent">{formatCurrency(trader.totals.balance)}</p></div>
                 </div>
                 <div className="overflow-x-auto">
@@ -167,6 +168,42 @@ export default function TraderReportsPage() {
                     </tbody>
                   </table>
                 </div>
+                {trader.payments?.length > 0 && (
+                  <div className="space-y-2">
+                    <p className="text-xs font-medium text-ink-soft">الدفعات والمقاصة</p>
+                    <table className="w-full text-xs">
+                      <thead>
+                        <tr className="text-ink-faint border-b border-surface-border">
+                          <th className="text-right py-2 px-1">التاريخ</th>
+                          <th className="text-right py-2 px-1">البيان</th>
+                          <th className="text-left py-2 px-1">المبلغ</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {trader.payments.map((p, idx) => (
+                          <tr
+                            key={`${p.date}-${p.kind}-${idx}`}
+                            className={
+                              p.kind === 'offset_debit'
+                                ? 'border-b border-surface-border/40 bg-warning/5'
+                                : 'border-b border-surface-border/40 bg-success/5'
+                            }
+                          >
+                            <td className="py-1.5 px-1">{formatDate(p.date)}</td>
+                            <td className="py-1.5 px-1">
+                              {p.kind === 'offset_debit'
+                                ? 'مقاصة (خصم)'
+                                : p.kind === 'offset_credit'
+                                  ? 'مقاصة (دائن)'
+                                  : p.notes || 'دفعة'}
+                            </td>
+                            <td className="py-1.5 px-1 text-left">{formatCurrency(p.amount)}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
               </>
             )}
           </div>

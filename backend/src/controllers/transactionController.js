@@ -86,6 +86,15 @@ const transactionController = {
     res.status(201).json(apiResponse.success(result, 'تمت المقاصة'))
   }),
 
+  update: asyncHandler(async (req, res) => {
+    const tx = AccountingService.updateTransaction(
+      parseInt(req.params.id, 10),
+      req.body,
+      req.user.id
+    )
+    res.json(apiResponse.success(tx, 'تم تعديل الحركة'))
+  }),
+
   softDelete: asyncHandler(async (req, res) => {
     TransactionModel.softDelete(parseInt(req.params.id, 10))
     res.json(apiResponse.success(null, 'تم الحذف'))

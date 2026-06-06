@@ -57,7 +57,6 @@ function fullBackupWorkbook(data) {
     ['الشحنات', counts.shipments ?? 0],
     ['أيام المربح', counts.daily_profit ?? 0],
     ['لقطات الجرد', counts.inventory_snapshots ?? 0],
-    ['شحنات العصائر', counts.juice_shipments ?? 0],
     ['المستخدمون', counts.users ?? 0],
     ['مفاتيح الإعدادات', counts.settings ?? 0],
   ]
@@ -214,34 +213,6 @@ function fullBackupWorkbook(data) {
       r.category || '',
     ]),
     { numCols: [5, 6, 7, 8] }
-  )
-
-  addSheet(
-    wb,
-    'عصائر',
-    [
-      'رقم',
-      'تاريخ',
-      'منتج',
-      'مرسل',
-      'مفقود',
-      'مستلم',
-      'ربح إجمالي',
-      'مركز',
-      'ملاحظات',
-    ],
-    (data.juice_shipments || []).map((j) => [
-      j.ref_number,
-      fmtDate(j.date),
-      j.product_type,
-      j.units_sent,
-      j.units_lost,
-      j.units_received,
-      j.total_profit,
-      j.center_name || '',
-      j.notes || '',
-    ]),
-    { numCols: [7] }
   )
 
   addSheet(

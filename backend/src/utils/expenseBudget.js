@@ -1,7 +1,8 @@
 const { calculateDailyGrossProfit } = require('../engine/dailyProfit')
 
-const DIFF_KEYS = ['transport_diff', 'workers_diff', 'driver_diff', 'credit_diff']
+const DIFF_KEYS = ['clearance_diff', 'transport_diff', 'workers_diff', 'driver_diff', 'credit_diff']
 const DIFF_LABELS = {
+  clearance_diff: 'فرق تخليص',
   transport_diff: 'فرق نقل تركي',
   workers_diff: 'فرق عمال',
   driver_diff: 'فرق سائق سوري',

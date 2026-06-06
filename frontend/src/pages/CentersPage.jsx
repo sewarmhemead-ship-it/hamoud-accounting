@@ -41,7 +41,7 @@ export default function CentersPage() {
   const [search, setSearch] = useState('')
   const [typeFilter, setTypeFilter] = useState('')
   const [showForm, setShowForm] = useState(false)
-  const [form, setForm] = useState({ name: '', type: 'trader', currency: 'USD' })
+  const [form, setForm] = useState({ name: '', type: 'trader', currency: 'USD', phone: '' })
   const queryClient = useQueryClient()
   const showToast = useUiStore((s) => s.showToast)
 
@@ -55,7 +55,7 @@ export default function CentersPage() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['centers'] })
       setShowForm(false)
-      setForm({ name: '', type: 'trader', currency: 'USD' })
+      setForm({ name: '', type: 'trader', currency: 'USD', phone: '' })
       showToast('تم إنشاء المركز', 'success')
     },
     onError: (err) => showToast(err.message, 'error'),
@@ -119,6 +119,15 @@ export default function CentersPage() {
                 <option value="SYP">ليرة سورية</option>
                 <option value="TRY">ليرة تركية</option>
               </select>
+            </div>
+            <div>
+              <label className="label">هاتف / واتساب</label>
+              <input
+                value={form.phone}
+                onChange={(e) => setForm({ ...form, phone: e.target.value })}
+                placeholder="مع رمز الدولة، مثال: 963944123456"
+                dir="ltr"
+              />
             </div>
           </div>
           <button type="submit" className="btn-primary" disabled={createMutation.isPending}>

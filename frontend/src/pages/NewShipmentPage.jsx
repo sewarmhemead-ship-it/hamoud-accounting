@@ -80,6 +80,13 @@ export default function NewShipmentPage() {
 
   const set = (key, val) => setForm((f) => ({ ...f, [key]: val }))
 
+  // تزامن فوري عند الإدخال: ما ندفعه للمخلص (التكلفة) ينتقل تلقائياً لما نأخذه من
+  // التاجر (الفاتورة) — يبقى قابلاً للتعديل لإضافة المربح يدوياً. التزامن وقت الإدخال فقط.
+  const setCost = (costKey, val) => {
+    const priceKey = DUAL_COST_TO_PRICE[costKey]
+    setForm((f) => ({ ...f, [costKey]: val, ...(priceKey ? { [priceKey]: val } : {}) }))
+  }
+
   // حسابات حيّة
   const calc = useMemo(() => {
     const costTotal = DUAL_COST_FIELDS.reduce((a, [k]) => a + n(form[k]), 0)
@@ -102,6 +109,17 @@ export default function NewShipmentPage() {
     if (!n(form.price_syrian_driver) && !n(form.cost_turkish_driver)) m.push('السائق')
     return m
   }, [form])
+
+  // منع الحفظ حتى تكتمل الحقول الأساسية + الأقلام الإلزامية
+  const blocking = useMemo(() => {
+    const b = []
+    if (!form.center_id) b.push('التاجر')
+    if (!form.border_id) b.push('المعبر')
+    if (!form.source?.trim()) b.push('المصدر')
+    if (!form.destination?.trim()) b.push('الوجهة')
+    if (!form.entry_date) b.push('تاريخ الدخول')
+    return [...b, ...missing]
+  }, [form, missing])
 
   const copyCostToPrice = () => {
     setForm((f) => {
@@ -135,6 +153,10 @@ export default function NewShipmentPage() {
 
   const handleSubmit = (e) => {
     e.preventDefault()
+    if (blocking.length > 0) {
+      showToast(`أكمل الحقول الناقصة: ${blocking.join('، ')}`, 'error')
+      return
+    }
     const payload = {
       center_id: parseInt(form.center_id, 10),
       clearance_center_id: form.clearance_center_id
@@ -160,7 +182,7 @@ export default function NewShipmentPage() {
       <div>
         <h2 className="text-xl font-bold text-ink">تخليص جديد</h2>
         <p className="text-ink-soft text-sm mt-1">
-          سجّل السيارة معلقة — تكلفة المخلص مقابل فاتورة التاجر، والمربح يُحسب فوراً
+          تكلفة المخلص تنتقل تلقائياً لفاتورة التاجر — عدّل الفاتورة لإضافة مربحك. كل الحقول الإلزامية مطلوبة قبل الحفظ
         </p>
       </div>
 
@@ -306,7 +328,7 @@ export default function NewShipmentPage() {
               {DUAL_COST_FIELDS.map(([key, label]) => (
                 <div key={key}>
                   <label className="label">{label}</label>
-                  <input type="number" step="0.01" min="0" value={form[key]} onChange={(e) => set(key, e.target.value)} placeholder="0" />
+                  <input type="number" step="0.01" min="0" value={form[key]} onChange={(e) => setCost(key, e.target.value)} placeholder="0" />
                 </div>
               ))}
             </div>
@@ -350,8 +372,21 @@ export default function NewShipmentPage() {
           <textarea className="w-full" rows={2} value={form.notes} onChange={(e) => set('notes', e.target.value)} />
         </div>
 
+        {blocking.length > 0 && (
+          <div className="flex items-center gap-2 text-sm flex-wrap rounded-lg bg-warning/10 px-3 py-2">
+            <span className="text-warning font-medium">لا يمكن الحفظ — أكمل:</span>
+            {blocking.map((b) => (
+              <span key={b} className="pill bg-warning/20 text-warning">◌ {b}</span>
+            ))}
+          </div>
+        )}
+
         <div className="flex items-center gap-3">
-          <button type="submit" className="btn-primary" disabled={createMutation.isPending}>
+          <button
+            type="submit"
+            className="btn-primary"
+            disabled={createMutation.isPending || blocking.length > 0}
+          >
             {createMutation.isPending ? 'جاري الحفظ...' : 'تسجيل السيارة'}
           </button>
           <span className="text-xs text-ink-faint">

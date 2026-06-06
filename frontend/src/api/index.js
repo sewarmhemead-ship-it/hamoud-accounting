@@ -44,6 +44,7 @@ export const transactionsApi = {
   get: (id) => client.get(`/transactions/${id}`),
   createPayment: (data) => client.post('/transactions/payment', data),
   offset: (data) => client.post('/transactions/offset', data),
+  update: (id, data) => client.put(`/transactions/${id}`, data),
   delete: (id) => client.delete(`/transactions/${id}`),
 }
 

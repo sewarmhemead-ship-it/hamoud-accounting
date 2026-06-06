@@ -8,6 +8,7 @@ const { validate } = require('../middleware/validate.middleware')
 const {
   createPaymentSchema,
   offsetSchema,
+  updateTransactionSchema,
 } = require('../validators/transaction.validator')
 
 const router = express.Router()
@@ -18,6 +19,7 @@ router.get('/', transactionController.list)
 router.get('/:id', transactionController.getById)
 router.post('/payment', requirePermission(PERM.PAYMENTS_CREATE), validate(createPaymentSchema), auditMiddleware('payment', 'transaction'), transactionController.createPayment)
 router.post('/offset', requirePermission(PERM.OFFSET), validate(offsetSchema), auditMiddleware('offset', 'transaction'), transactionController.offset)
+router.put('/:id', requirePermission(PERM.TRANSACTIONS_EDIT), validate(updateTransactionSchema), auditMiddleware('update', 'transaction'), transactionController.update)
 router.delete('/:id', requirePermission(PERM.PAYMENTS_DELETE), auditMiddleware('delete', 'transaction'), transactionController.softDelete)
 
 module.exports = router

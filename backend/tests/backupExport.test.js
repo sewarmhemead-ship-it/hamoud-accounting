@@ -11,7 +11,6 @@ const minimalData = {
     shipments: 1,
     daily_profit: 1,
     inventory_snapshots: 1,
-    juice_shipments: 1,
     users: 1,
     settings: 2,
   },
@@ -84,19 +83,6 @@ const minimalData = {
       category: 'trader',
     },
   ],
-  juice_shipments: [
-    {
-      ref_number: 'J-1',
-      date: '2026-06-01',
-      product_type: 'برتقال',
-      units_sent: 100,
-      units_lost: 2,
-      units_received: 98,
-      total_profit: 150,
-      center_name: 'تاجر أ',
-      notes: '',
-    },
-  ],
   users: [
     {
       id: 1,
@@ -123,7 +109,6 @@ describe('fullBackupWorkbook', () => {
       'الشحنات',
       'المربح_اليومي',
       'الجرد',
-      'عصائر',
       'مستخدمون',
       'إعدادات',
     ])
@@ -149,7 +134,7 @@ describe('fullBackupWorkbook', () => {
 
     const loaded = new ExcelJS.Workbook()
     await loaded.xlsx.load(buffer)
-    expect(loaded.worksheets.length).toBe(9)
+    expect(loaded.worksheets.length).toBe(8)
     expect(loaded.getWorksheet('مستخدمون').getRow(2).getCell(2).value).toBe('admin')
   })
 })

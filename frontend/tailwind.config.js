@@ -23,8 +23,8 @@ export default {
         info:    '#38bdf8',
         ink: {
           DEFAULT: '#f8fafc',
-          soft:    '#64748b',
-          faint:   '#2d3748',
+          soft:    '#cbd5e1',
+          faint:   '#94a3b8',
         },
       },
       fontFamily: {

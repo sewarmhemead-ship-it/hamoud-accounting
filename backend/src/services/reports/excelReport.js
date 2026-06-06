@@ -542,9 +542,90 @@ function inventoryRangeWorkbook(data) {
   return wb
 }
 
+/** ورقة جانب واحد من الكشف المزدوج (مخلص=cost أو تاجر=price). */
+function dualSideSheet(wb, data, side, field, sheetName) {
+  const cols = side.columns || []
+  const ws = wb.addWorksheet(sheetName, {
+    views: [{ rightToLeft: true }],
+    pageSetup: { paperSize: 9, orientation: 'landscape', fitToPage: true },
+  })
+
+  const header = ['م', 'التاريخ', 'البيان', ...cols.map((c) => c.label), 'المجموع', 'الدفعات']
+  const span = header.length
+  titleBlock(ws, data, side.label, span)
+  const hr = ws.addRow(header)
+  styleHeaderRow(hr)
+
+  let i = 1
+  for (const r of side.rows) {
+    if (r.kind === 'truck') {
+      ws.addRow([
+        i++,
+        fmtDate(r.date),
+        r.goods_name || r.ref_number || '',
+        ...cols.map((c) => (r[field] && r[field][c.key]) || 0),
+        r[`${field}_total`] || 0,
+        '',
+      ])
+    } else {
+      ws.addRow([
+        i++,
+        fmtDate(r.date),
+        r.label || 'دفعة',
+        ...cols.map(() => ''),
+        '',
+        r.amount || 0,
+      ])
+    }
+  }
+
+  totalsRow(ws, ['الإجمالي', '', '', ...cols.map(() => ''), side.total_charges, side.total_payments])
+  ws.addRow([])
+  const bal = ws.addRow([`الرصيد — ${side.direction}`, '', '', ...cols.map(() => ''), '', side.abs_balance])
+  bal.getCell(1).font = { bold: true }
+  bal.getCell(span).font = { bold: true, color: { argb: GOLD } }
+
+  const widths = [5, 12, 20, ...cols.map(() => 12), 12, 12]
+  ws.columns.forEach((col, idx) => {
+    col.width = widths[idx] || 12
+  })
+  return ws
+}
+
+/** الكشف المزدوج: ملخص ربح + كشف المخلص + كشف التاجر. */
+function dualStatementWorkbook(data) {
+  const wb = new ExcelJS.Workbook()
+  wb.creator = data.company
+
+  const ws = wb.addWorksheet('ملخص الربح', { views: [{ rightToLeft: true }] })
+  titleBlock(ws, data, 'الكشف المزدوج — ملخص الربح', 2)
+  const hr = ws.addRow(['البند', 'القيمة'])
+  styleHeaderRow(hr)
+  const p = data.company_profit
+  const summaryRows = [
+    ['فاتورة التاجر (ما نأخذه)', data.trader_side.total_charges],
+    ['تكلفة المخلص (ما ندفعه)', data.broker_side.total_charges],
+    ['مربح الشركة الإجمالي', p.total],
+    ['عدد السيارات المُرحَّلة', p.truck_count],
+    ['متوسط مربح السيارة', p.per_truck_avg],
+  ]
+  for (const [k, v] of summaryRows) {
+    const row = ws.addRow([k, v])
+    row.getCell(1).font = { bold: true }
+    row.getCell(2).font = { bold: true, color: { argb: GOLD } }
+  }
+  ws.getColumn(1).width = 28
+  ws.getColumn(2).width = 16
+
+  dualSideSheet(wb, data, data.broker_side, 'cost', 'كشف المخلص')
+  dualSideSheet(wb, data, data.trader_side, 'price', 'كشف التاجر')
+  return wb
+}
+
 module.exports = {
   traderWorkbook,
   profitWorkbook,
+  dualStatementWorkbook,
   periodWorkbook,
   dailyProfitWorkbook,
   dailyProfitMonthWorkbook,

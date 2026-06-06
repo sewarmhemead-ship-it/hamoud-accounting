@@ -1,15 +1,20 @@
 const ShipmentService = require('../services/ShipmentService')
 const ShipmentModel = require('../models/ShipmentModel')
+const { SHIPMENT_STATUS } = require('../config/constants')
 const apiResponse = require('../utils/apiResponse')
 const asyncHandler = require('../utils/asyncHandler')
 const { normalizeSearchQuery } = require('../utils/searchNormalize')
 
 const shipmentController = {
   list: asyncHandler(async (req, res) => {
-    const { center_id, status, clearance_center_id, search, from, to, limit = 50, offset = 0 } = req.query
+    const { center_id, status, wip, clearance_center_id, search, from, to, limit = 50, offset = 0 } = req.query
     const filters = {}
     if (center_id)            filters.center_id = parseInt(center_id, 10)
-    if (status)               filters.status = status
+    if (wip === '1' || wip === 'true' || status === 'wip') {
+      filters.status_in = [SHIPMENT_STATUS.PENDING, SHIPMENT_STATUS.COMPLETE]
+    } else if (status) {
+      filters.status = status
+    }
     if (clearance_center_id)  filters.clearance_center_id = parseInt(clearance_center_id, 10)
     if (search?.trim())       filters.search = normalizeSearchQuery(search)
     if (from)                 filters.from = from
@@ -92,10 +97,6 @@ const shipmentController = {
           total_value: pendingDb.total + legacyComplete.total,
         },
         ready_to_post: {
-          count: readyToPost.count,
-          total_value: readyToPost.total_value,
-        },
-        complete: {
           count: readyToPost.count,
           total_value: readyToPost.total_value,
         },

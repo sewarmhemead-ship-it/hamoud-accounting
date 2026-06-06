@@ -401,9 +401,66 @@ function inventoryRangeHtml(data) {
   )
 }
 
+/** جدول جانب واحد من الكشف المزدوج. */
+function dualSideTable(side, field) {
+  const cols = side.columns || []
+  const head =
+    `<tr><th>م</th><th>التاريخ</th><th>البيان</th>` +
+    cols.map((c) => `<th>${esc(c.label)}</th>`).join('') +
+    `<th>المجموع</th><th>الدفعات</th></tr>`
+
+  let i = 1
+  const rows = side.rows
+    .map((r) => {
+      if (r.kind === 'truck') {
+        return (
+          `<tr><td>${i++}</td><td>${fmtDate(r.date)}</td><td>${esc(r.goods_name || r.ref_number)}</td>` +
+          cols.map((c) => `<td class="num">${money((r[field] && r[field][c.key]) || 0)}</td>`).join('') +
+          `<td class="num">${money(r[`${field}_total`] || 0)}</td><td></td></tr>`
+        )
+      }
+      return (
+        `<tr><td>${i++}</td><td>${fmtDate(r.date)}</td><td>${esc(r.label || 'دفعة')}</td>` +
+        cols.map(() => '<td></td>').join('') +
+        `<td></td><td class="num pos">${money(r.amount || 0)}</td></tr>`
+      )
+    })
+    .join('')
+
+  const totCols = cols.map(() => '<td></td>').join('')
+  const tot =
+    `<tr class="tot"><td>الإجمالي</td><td></td><td></td>${totCols}` +
+    `<td class="num">${money(side.total_charges)}</td><td class="num">${money(side.total_payments)}</td></tr>` +
+    `<tr class="tot"><td colspan="${3 + cols.length}">الرصيد — ${esc(side.direction)}</td>` +
+    `<td colspan="2" class="num">${money(side.abs_balance)}</td></tr>`
+
+  return `<table>${head}${rows}${tot}</table>`
+}
+
+function dualStatementHtml(data) {
+  const p = data.company_profit
+  const banner = `<table class="summary" style="width:380px">
+    <tr><td class="k">فاتورة التاجر (ما نأخذه)</td><td class="v num">${money(data.trader_side.total_charges)}</td></tr>
+    <tr><td class="k">تكلفة المخلص (ما ندفعه)</td><td class="v num">${money(data.broker_side.total_charges)}</td></tr>
+    <tr><td class="k">مربح الشركة الإجمالي</td><td class="v num">${money(p.total)}</td></tr>
+    <tr><td class="k">عدد السيارات المُرحَّلة</td><td class="v num">${p.truck_count}</td></tr>
+    <tr><td class="k">متوسط مربح السيارة</td><td class="v num">${money(p.per_truck_avg)}</td></tr>
+  </table>`
+
+  const body =
+    banner +
+    `<div class="section">كشف المخلص (ما ندفعه)</div>` +
+    dualSideTable(data.broker_side, 'cost') +
+    `<div class="section">كشف التاجر (ما نأخذه)</div>` +
+    dualSideTable(data.trader_side, 'price')
+
+  return shell(data, 'الكشف المزدوج', body)
+}
+
 module.exports = {
   traderHtml,
   profitHtml,
+  dualStatementHtml,
   periodHtml,
   dailyProfitHtml,
   monthlyProfitHtml,

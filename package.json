@@ -1,0 +1,73 @@
+{
+  "name": "hamoud-accounting-desktop",
+  "version": "1.0.0",
+  "description": "حمود — محاسبة تخليص جمركي (SewarTech)",
+  "author": "SewarTech",
+  "license": "UNLICENSED",
+  "main": "electron/main.js",
+  "scripts": {
+    "electron": "electron .",
+    "rebuild:backend": "electron-rebuild -m ./backend -f -o better-sqlite3,bcrypt",
+    "build:ui": "cd frontend && npm run build",
+    "dist": "electron-builder --win",
+    "package": "npm run build:ui && npm run rebuild:backend && npm run dist"
+  },
+  "devDependencies": {
+    "@electron/rebuild": "^3.7.1",
+    "electron": "^33.2.0",
+    "electron-builder": "^25.1.8"
+  },
+  "build": {
+    "appId": "com.sewartech.hamoud",
+    "productName": "Hamoud Accounting",
+    "copyright": "Copyright © 2026 SewarTech",
+    "directories": {
+      "output": "release-electron",
+      "buildResources": "installer"
+    },
+    "files": [
+      "electron/**/*"
+    ],
+    "extraResources": [
+      {
+        "from": "backend",
+        "to": "backend",
+        "filter": [
+          "**/*",
+          "!data/**",
+          "!backups/**",
+          "!tests/**",
+          "!**/*.test.js",
+          "!**/.sqlite-ready",
+          "!node_modules/.cache/**",
+          "!node_modules/.bin/**"
+        ]
+      },
+      {
+        "from": "installer/sewartech-setup.ico",
+        "to": "icon.ico"
+      }
+    ],
+    "win": {
+      "target": [
+        {
+          "target": "nsis",
+          "arch": ["x64"]
+        }
+      ],
+      "icon": "installer/sewartech-setup.ico",
+      "artifactName": "HamoudAccounting-Setup-${version}.${ext}"
+    },
+    "nsis": {
+      "oneClick": false,
+      "perMachine": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "حمود محاسبة",
+      "uninstallDisplayName": "حمود — محاسبة تخليص (SewarTech)",
+      "installerIcon": "installer/sewartech-setup.ico",
+      "uninstallerIcon": "installer/sewartech-setup.ico"
+    }
+  }
+}

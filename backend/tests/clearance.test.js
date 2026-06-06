@@ -1,6 +1,5 @@
 const {
   calculateShipmentTotal,
-  calculateTax2Pct,
   calculateCostTotal,
   calculatePriceTotal,
   calculateShipmentProfit,
@@ -62,41 +61,6 @@ describe('calculateShipmentTotal — مجموع تكلفة تخليص السيا
   it('مدخل ليس كائناً ⇒ CalculationError', () => {
     expect(() => calculateShipmentTotal(null)).toThrow(CalculationError)
     expect(() => calculateShipmentTotal(42)).toThrow(CalculationError)
-  })
-})
-
-describe('calculateTax2Pct — ضريبة 2% على الترسيم', () => {
-  it('يحسب 2% من الترسيم', () => {
-    expect(calculateTax2Pct(1000)).toBe(20)
-  })
-
-  it('ترسيم صفر ⇒ ضريبة صفر', () => {
-    expect(calculateTax2Pct(0)).toBe(0)
-  })
-
-  it('ترسيم مفقود ⇒ صفر', () => {
-    expect(calculateTax2Pct(null)).toBe(0)
-    expect(calculateTax2Pct(undefined)).toBe(0)
-  })
-
-  it('يقرّب لمنزلتين', () => {
-    expect(calculateTax2Pct(333.33)).toBe(6.67)
-  })
-
-  it('قيمة override صريحة تُستخدم بدل الحساب', () => {
-    expect(calculateTax2Pct(1000, 15)).toBe(15)
-  })
-
-  it('override = 0 يُحترم (لا يُعامل كمفقود)', () => {
-    expect(calculateTax2Pct(1000, 0)).toBe(0)
-  })
-
-  it('ترسيم سالب ⇒ CalculationError', () => {
-    expect(() => calculateTax2Pct(-100)).toThrow(CalculationError)
-  })
-
-  it('override سالب ⇒ CalculationError', () => {
-    expect(() => calculateTax2Pct(1000, -5)).toThrow(CalculationError)
   })
 })
 

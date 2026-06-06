@@ -6,6 +6,7 @@ const { toFiniteNumber, round2 } = require('./numbers')
  *
  * @param {object} params
  * @param {number} [params.baseClearance=0] تخليص الشركة الأساسي لليوم
+ * @param {number} [params.clearance_diff=0] فرق تخليص يدوي يُضاف على الأساس
  * @param {number} [params.transport_diff=0] فرق النقل التركي
  * @param {number} [params.workers_diff=0] فرق العمال
  * @param {number} [params.driver_diff=0] فرق أجار السائق السوري
@@ -14,6 +15,9 @@ const { toFiniteNumber, round2 } = require('./numbers')
  */
 function calculateDailyGrossProfit(params = {}) {
   const base = toFiniteNumber(params.baseClearance, 'تخليص الشركة', {
+    allowNegative: true,
+  })
+  const clearance = toFiniteNumber(params.clearance_diff, 'فرق التخليص', {
     allowNegative: true,
   })
   const transport = toFiniteNumber(params.transport_diff, 'فرق النقل', {
@@ -29,7 +33,7 @@ function calculateDailyGrossProfit(params = {}) {
     allowNegative: true,
   })
 
-  return round2(base + transport + workers + driver + credit)
+  return round2(base + clearance + transport + workers + driver + credit)
 }
 
 /**

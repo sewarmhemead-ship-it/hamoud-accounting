@@ -120,11 +120,6 @@ const reportController = {
           count: readyToPost.count,
           total_value: readyToPost.total_value,
         },
-        // توافق خلفي — complete = جاهزة للترحيل (ديناميكي)
-        complete: {
-          count: readyToPost.count,
-          total_value: readyToPost.total_value,
-        },
         posted:    { count: posted.count,    total_value: posted.total },
         delivered: { count: delivered.count, total_value: delivered.total },
       },

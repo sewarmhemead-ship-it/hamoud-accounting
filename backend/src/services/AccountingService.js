@@ -92,6 +92,51 @@ class AccountingService {
     return this._buildTx(data, 'in', userId)
   }
 
+  /**
+   * تعديل حركة مالية مسجّلة — تُعيد حساب amount_usd عند تغيّر المبلغ/العملة/سعر الصرف.
+   * الرصيد يُحتسب لحظياً من مجاميع الحركات، فالتعديل ينعكس فوراً على ذمة المركز.
+   *
+   * ⚠️ تعديل قيد ناتج عن ترحيل سيارة (clearance) أو مقاصة (offset) يغيّر القيد فقط ولا
+   * يُزامن مصدره (السيارة/القيد المقابل). يُترك القرار للمدير عبر الصلاحية.
+   *
+   * @param {number} id معرّف الحركة
+   * @param {object} data الحقول المراد تحديثها (amount/currency/exchange_rate/date/notes/category)
+   * @param {number} userId المستخدم المنفّذ
+   * @returns {object} الحركة بعد التحديث
+   */
+  updateTransaction(id, data, userId) {
+    const existing = TransactionModel.findById(id)
+
+    const amount = data.amount ?? existing.amount
+    const currency = data.currency ?? existing.currency
+    const exchangeRate = data.exchange_rate ?? existing.exchange_rate
+    const recompute =
+      data.amount !== undefined ||
+      data.currency !== undefined ||
+      data.exchange_rate !== undefined
+
+    let amount_usd = existing.amount_usd
+    let rate = exchangeRate
+    if (recompute) {
+      const conv = convertToUsd(amount, currency, exchangeRate)
+      amount_usd = conv.amount_usd
+      rate = conv.exchange_rate
+    }
+
+    const patch = {
+      amount,
+      currency,
+      exchange_rate: rate,
+      amount_usd,
+      updated_by: userId,
+    }
+    if (data.date !== undefined) patch.date = data.date
+    if (data.notes !== undefined) patch.notes = data.notes
+    if (data.category !== undefined) patch.category = data.category
+
+    return TransactionModel.update(id, patch)
+  }
+
   createManualOut(data, userId) {
     return this._buildTx(data, 'out', userId)
   }

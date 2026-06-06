@@ -12,6 +12,7 @@ export function isListFilterActive({ search = '', status = '', from = '', to = '
 export function buildShipmentsListParams({
   search = '',
   status = '',
+  wip = false,
   from = '',
   to = '',
   limit = 25,
@@ -19,7 +20,7 @@ export function buildShipmentsListParams({
 } = {}) {
   const q = normalizeSearchQuery(search)
   return {
-    ...(status ? { status } : {}),
+    ...(wip ? { wip: true } : status ? { status } : {}),
     ...(q ? { search: q } : {}),
     ...(from ? { from } : {}),
     ...(to ? { to } : {}),

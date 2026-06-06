@@ -46,12 +46,13 @@ export default function WipPage() {
     search: debouncedSearch,
     from,
     to,
+    wip: true,
     limit: 200,
   })
 
   const { data: wipRes, isLoading, isFetching } = useQuery({
     queryKey: ['shipments', 'wip', debouncedSearch, from, to],
-    queryFn: () => shipmentsApi.list({ ...listParams, status: 'pending' }),
+    queryFn: () => shipmentsApi.list(listParams),
   })
 
   const clearFilters = useCallback(() => {

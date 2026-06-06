@@ -1,15 +1,19 @@
-import { useState, useCallback, useMemo } from 'react'
-import { useQuery } from '@tanstack/react-query'
+import { useState, useCallback, useMemo, useEffect } from 'react'
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { Link } from 'react-router-dom'
 import { transactionsApi, centersApi } from '../api'
 import PageHeader from '../components/PageHeader'
 import TransactionsFilterBar from '../components/TransactionsFilterBar'
 import { TX_TYPE, TX_CATEGORY } from '../constants'
+import { PERM } from '../constants/permissions'
+import { useAuthStore, useUiStore } from '../store/auth.store'
 import { useDebouncedValue } from '../hooks/useDebouncedValue'
 import { normalizeSearchQuery } from '../utils/searchNormalize'
 import { formatCurrency, formatDate } from '../utils/format'
 
 const PAGE_SIZE = 40
+const CURRENCIES = ['USD', 'SYP', 'TRY']
+const LINKED_CATEGORIES = ['clearance', 'offset']
 
 function buildListParams({
   debouncedSearch,
@@ -65,7 +69,140 @@ function SourceCell({ row }) {
   return <span className="text-ink-faint text-xs">—</span>
 }
 
+function EditTransactionModal({ tx, onClose, onSaved }) {
+  const showToast = useUiStore((s) => s.showToast)
+  const [form, setForm] = useState({
+    amount: '',
+    currency: 'USD',
+    exchange_rate: '',
+    date: '',
+    notes: '',
+  })
+
+  useEffect(() => {
+    if (!tx) return
+    setForm({
+      amount: tx.amount ?? '',
+      currency: tx.currency || 'USD',
+      exchange_rate: tx.exchange_rate ?? '',
+      date: (tx.date || '').slice(0, 10),
+      notes: tx.notes ?? '',
+    })
+  }, [tx])
+
+  const mutation = useMutation({
+    mutationFn: (data) => transactionsApi.update(tx.id, data),
+    onSuccess: () => {
+      showToast('تم تعديل الحركة', 'success')
+      onSaved()
+    },
+    onError: (err) => showToast(err.message, 'error'),
+  })
+
+  if (!tx) return null
+
+  const isLinked = LINKED_CATEGORIES.includes(tx.category)
+  const needsRate = form.currency !== 'USD'
+
+  const submit = (e) => {
+    e.preventDefault()
+    const payload = {
+      amount: parseFloat(form.amount),
+      currency: form.currency,
+      exchange_rate: needsRate && form.exchange_rate ? parseFloat(form.exchange_rate) : 1,
+      date: form.date,
+      notes: form.notes || null,
+    }
+    mutation.mutate(payload)
+  }
+
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center p-4"
+      style={{ background: 'rgba(0,0,0,0.6)' }}
+      onClick={onClose}
+    >
+      <div
+        className="card w-full max-w-md space-y-4 max-h-[90vh] overflow-y-auto"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="flex items-center justify-between">
+          <h3 className="font-bold text-ink">تعديل الحركة</h3>
+          <span className="font-mono text-xs text-accent">{tx.ref_number}</span>
+        </div>
+
+        {isLinked && (
+          <div className="rounded-lg px-3 py-2.5 text-xs leading-relaxed" style={{ background: 'rgba(234,179,8,0.12)', border: '1px solid rgba(234,179,8,0.3)' }}>
+            <span className="text-warning font-semibold">⚠️ تنبيه: </span>
+            <span className="text-ink-soft">
+              {tx.category === 'clearance'
+                ? 'هذا قيد ناتج عن ترحيل سيارة. تعديل المبلغ يغيّر الذمة فقط ولا يُحدّث أقلام السيارة — قد ينشأ اختلاف بين الكشف وتفاصيل السيارة.'
+                : 'هذا قيد مقاصة (نصف زوج متوازن). تعديل طرف واحد فقط سيفك توازن المقاصة.'}
+            </span>
+          </div>
+        )}
+
+        <form className="space-y-3" onSubmit={submit}>
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="label">المبلغ *</label>
+              <input
+                type="number" step="0.01" min="0.01"
+                value={form.amount}
+                onChange={(e) => setForm({ ...form, amount: e.target.value })}
+                required
+              />
+            </div>
+            <div>
+              <label className="label">العملة</label>
+              <select value={form.currency} onChange={(e) => setForm({ ...form, currency: e.target.value })}>
+                {CURRENCIES.map((c) => (
+                  <option key={c} value={c}>{c}</option>
+                ))}
+              </select>
+            </div>
+          </div>
+
+          {needsRate && (
+            <div>
+              <label className="label">سعر الصرف مقابل الدولار *</label>
+              <input
+                type="number" step="0.01" min="0.01"
+                value={form.exchange_rate}
+                onChange={(e) => setForm({ ...form, exchange_rate: e.target.value })}
+                placeholder={form.currency === 'SYP' ? 'مثال: 14500' : 'مثال: 32'}
+                required
+              />
+            </div>
+          )}
+
+          <div>
+            <label className="label">التاريخ</label>
+            <input type="date" value={form.date} onChange={(e) => setForm({ ...form, date: e.target.value })} />
+          </div>
+
+          <div>
+            <label className="label">ملاحظات</label>
+            <input value={form.notes} onChange={(e) => setForm({ ...form, notes: e.target.value })} placeholder="..." />
+          </div>
+
+          <div className="flex gap-2 pt-1">
+            <button type="submit" className="btn-success flex-1" disabled={mutation.isPending}>
+              {mutation.isPending ? 'جاري الحفظ...' : 'حفظ التعديل'}
+            </button>
+            <button type="button" className="btn-secondary" onClick={onClose}>إلغاء</button>
+          </div>
+        </form>
+      </div>
+    </div>
+  )
+}
+
 export default function TransactionsPage() {
+  const queryClient = useQueryClient()
+  const hasPermission = useAuthStore((s) => s.hasPermission)
+  const canEdit = hasPermission(PERM.TRANSACTIONS_EDIT)
+  const [editingTx, setEditingTx] = useState(null)
   const [search, setSearch] = useState('')
   const [type, setType] = useState('')
   const [category, setCategory] = useState('')
@@ -219,6 +356,7 @@ export default function TransactionsPage() {
                   'المبلغ',
                   'تسليم',
                   'ملاحظات',
+                  ...(canEdit ? ['إجراء'] : []),
                 ].map((h) => (
                   <th key={h} className="text-right py-3 px-3 text-xs text-ink-faint font-medium whitespace-nowrap">
                     {h}
@@ -272,6 +410,18 @@ export default function TransactionsPage() {
                         <span className="block text-[10px] text-ink-faint/80">{r.created_by_name}</span>
                       )}
                     </td>
+                    {canEdit && (
+                      <td className="py-2.5 px-3">
+                        <button
+                          type="button"
+                          className="btn-secondary !py-1 !px-2.5 text-xs"
+                          onClick={() => setEditingTx(r)}
+                          title="تعديل الحركة"
+                        >
+                          ✎ تعديل
+                        </button>
+                      </td>
+                    )}
                   </tr>
                 )
               })}
@@ -320,6 +470,19 @@ export default function TransactionsPage() {
             </button>
           </div>
         </div>
+      )}
+
+      {canEdit && editingTx && (
+        <EditTransactionModal
+          tx={editingTx}
+          onClose={() => setEditingTx(null)}
+          onSaved={() => {
+            setEditingTx(null)
+            queryClient.invalidateQueries({ queryKey: ['transactions'] })
+            queryClient.invalidateQueries({ queryKey: ['centers'] })
+            queryClient.invalidateQueries({ queryKey: ['dashboard'] })
+          }}
+        />
       )}
     </div>
   )

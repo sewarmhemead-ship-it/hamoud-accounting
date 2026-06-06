@@ -14,4 +14,6 @@ export const DEFAULT_APP_SETTINGS = {
   backup_auto_enabled: false,
   backup_interval_hours: 0.5,
   backup_include_db: true,
+  backup_destinations: [],
+  backup_keep_copies: 30,
 }

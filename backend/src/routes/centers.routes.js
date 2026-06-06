@@ -20,6 +20,8 @@ router.get('/:id/balance', centerController.getBalance)
 router.get('/:id/statement', centerController.getStatement)
 router.get('/:id/clearance-statement', centerController.getClearanceStatement)
 router.get('/:id/dual-statement', centerController.getDualStatement)
+router.get('/:id/reports/dual.xlsx', centerController.dualStatementXlsx)
+router.get('/:id/reports/dual.pdf', centerController.dualStatementPdf)
 router.post('/:id/post-ready', centerController.postReady)
 
 // تقارير التجار (معاينة JSON + تصدير Excel/PDF)

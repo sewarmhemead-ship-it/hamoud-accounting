@@ -37,27 +37,6 @@ const calculationsController = {
     }
   }),
 
-  brokerMargin: asyncHandler(async (req, res, next) => {
-    try {
-      const result = engine.calculateBrokerMarginFromLines(
-        req.body.broker || {},
-        req.body.trader || {}
-      )
-      res.json(apiResponse.success(result))
-    } catch (e) {
-      mapCalcError(e, next)
-    }
-  }),
-
-  flourLine: asyncHandler(async (req, res, next) => {
-    try {
-      const result = engine.calculateFlourTraderLine(req.body)
-      res.json(apiResponse.success(result))
-    } catch (e) {
-      mapCalcError(e, next)
-    }
-  }),
-
   dailyProfit: asyncHandler(async (req, res, next) => {
     try {
       const gross = engine.calculateDailyGrossProfit(req.body)

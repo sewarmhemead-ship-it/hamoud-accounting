@@ -25,4 +25,19 @@ const offsetSchema = z
     path: ['to_center_id'],
   })
 
-module.exports = { createPaymentSchema, offsetSchema }
+const updateTransactionSchema = z
+  .object({
+    amount: z.number().positive('المبلغ يجب أن يكون موجباً').optional(),
+    currency: z.enum(['USD', 'SYP', 'TRY']).optional(),
+    exchange_rate: z.number().positive('سعر الصرف يجب أن يكون موجباً').optional(),
+    date: z.string().min(1, 'التاريخ غير صالح').optional(),
+    notes: z.string().nullable().optional(),
+    category: z
+      .enum(['payment', 'offset', 'adjustment', 'expense', 'direct_sale', 'clearance'])
+      .optional(),
+  })
+  .refine((d) => Object.keys(d).length > 0, {
+    message: 'لا يوجد ما يُحدّث',
+  })
+
+module.exports = { createPaymentSchema, offsetSchema, updateTransactionSchema }
