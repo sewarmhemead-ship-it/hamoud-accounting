@@ -59,6 +59,34 @@ describe('ربط السيارات والترحيل — تكامل', () => {
     expect(traderAcct.posted_undelivered_value).toBe(2560)
   })
 
+  it('سيارة مزدوجة بلا أعمدة legacy تُصلَح عند الفتح وتصبح قابلة للترحيل', () => {
+    const truck = ShipmentService.createShipment(
+      {
+        center_id: ctx.traderId,
+        clearance_center_id: ctx.brokerId,
+        border_id: ctx.borderId,
+        goods_name: 'فول',
+        source: 'تركيا',
+        destination: 'حلب',
+        entry_date: ctx.testDate,
+        cost_tarseem: 500,
+        cost_clearance_fee: 50,
+        price_syrian_driver: 400,
+        price_tarseem: 550,
+      },
+      ctx.adminId
+    )
+    ctx.db
+      .prepare(
+        `UPDATE shipments SET tarseem = NULL, syrian_driver = NULL, clearance_fee = NULL WHERE id = ?`
+      )
+      .run(truck.id)
+
+    const detail = ShipmentService.getById(truck.id)
+    expect(detail.progress.is_complete).toBe(true)
+    expect(detail.tarseem).toBe(500)
+  })
+
   it('قائمة WIP تُرجع progress.missing', () => {
     ShipmentService.createShipment(
       {

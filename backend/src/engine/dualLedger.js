@@ -50,20 +50,22 @@ function missingRequiredFields(shipment, requiredFields) {
 function syncLegacyFromDual(financial = {}, dual = {}) {
   const out = { ...financial }
 
+  const legacyEmpty = (v) => v == null || Number(v) <= 0
+
   if (
-    out.tarseem == null &&
+    legacyEmpty(out.tarseem) &&
     (dual.cost_tarseem != null || dual.price_tarseem != null)
   ) {
     out.tarseem = dual.cost_tarseem ?? dual.price_tarseem
   }
   if (
-    out.clearance_fee == null &&
+    legacyEmpty(out.clearance_fee) &&
     (dual.cost_clearance_fee != null || dual.price_clearance_fee != null)
   ) {
     out.clearance_fee = dual.cost_clearance_fee ?? dual.price_clearance_fee
   }
   if (
-    out.syrian_driver == null &&
+    legacyEmpty(out.syrian_driver) &&
     (dual.price_syrian_driver != null || dual.cost_turkish_driver != null)
   ) {
     out.syrian_driver = dual.price_syrian_driver ?? dual.cost_turkish_driver
@@ -84,6 +86,42 @@ function shipmentHasDualData(shipment = {}) {
   return hasActiveDualLedger(shipment)
 }
 
+/** يبني patch لأعمدة legacy من cost/price عندما تكون مملوءة والقديمة فارغة */
+function buildLegacySyncPatch(shipment = {}) {
+  if (!hasActiveDualLedger(shipment)) return {}
+
+  const financial = {}
+  const dual = {}
+  for (const f of ['tarseem', 'syrian_driver', 'clearance_fee']) {
+    const v = shipment[f]
+    if (v !== undefined && v !== null && Number(v) > 0) financial[f] = v
+  }
+  for (const f of [...COST_FIELDS, ...PRICE_FIELDS]) {
+    if (shipment[f] !== undefined && shipment[f] !== null) dual[f] = shipment[f]
+  }
+
+  const synced = syncLegacyFromDual(financial, dual)
+  const patch = {}
+  for (const f of ['tarseem', 'syrian_driver', 'clearance_fee']) {
+    const cur = shipment[f]
+    const next = synced[f]
+    if (
+      (cur == null || Number(cur) <= 0) &&
+      next != null &&
+      Number(next) > 0
+    ) {
+      patch[f] = next
+    }
+  }
+
+  if (Object.keys(patch).length > 0) {
+    const merged = { ...shipment, ...patch }
+    patch.total_cost = resolveTotalCost(merged).traderAmount
+  }
+
+  return patch
+}
+
 module.exports = {
   DUAL_LEDGER_SIGNAL_FIELDS,
   REQUIRED_DUAL_MAP,
@@ -94,6 +132,7 @@ module.exports = {
   brokerShipmentValue,
   traderShipmentValue,
   shipmentHasDualData,
+  buildLegacySyncPatch,
   COST_FIELDS,
   PRICE_FIELDS,
 }

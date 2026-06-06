@@ -2,6 +2,7 @@ const {
   hasActiveDualLedger,
   missingRequiredFields,
   syncLegacyFromDual,
+  buildLegacySyncPatch,
   brokerShipmentValue,
   traderShipmentValue,
 } = require('../src/engine/dualLedger')
@@ -53,6 +54,22 @@ describe('dualLedger — ربط المزدوج بالكلاسيكي', () => {
     }
     expect(missingRequiredFields(s, ['tarseem', 'syrian_driver', 'clearance_fee'])).toEqual([])
     expect(classifyPostability(s).is_postable).toBe(true)
+  })
+
+  it('buildLegacySyncPatch يملأ legacy من cost/price', () => {
+    const patch = buildLegacySyncPatch({
+      cost_tarseem: 500,
+      cost_clearance_fee: 50,
+      price_syrian_driver: 400,
+      price_tarseem: 0,
+      tarseem: null,
+      clearance_fee: 0,
+      syrian_driver: null,
+    })
+    expect(patch.tarseem).toBe(500)
+    expect(patch.clearance_fee).toBe(50)
+    expect(patch.syrian_driver).toBe(400)
+    expect(patch.total_cost).toBeGreaterThan(0)
   })
 
   it('syncLegacyFromDual ينسخ الأقلام الإلزامية', () => {

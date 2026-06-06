@@ -118,7 +118,7 @@ export default function ShipmentDetailPage() {
   }
 
   const renderFieldRow = (field, label) => {
-    const filled = s[field] != null
+    const filled = s[field] != null && Number(s[field]) > 0
     return (
       <div key={field} className="flex items-center gap-4 flex-wrap">
         <span className={`w-4 text-center ${filled ? 'text-success' : 'text-ink-faint'}`}>
@@ -202,7 +202,35 @@ export default function ShipmentDetailPage() {
       )}
 
       {stage === 'wip' && (
-        <p className="text-xs text-ink-soft px-1">{SHIPMENT_STAGE_HINT.wip}</p>
+        <div className="space-y-3">
+          <p className="text-xs text-ink-soft px-1">{SHIPMENT_STAGE_HINT.wip}</p>
+          {canPost && (
+            <div className="card border border-success/25 bg-success/5">
+              <p className="text-sm text-ink mb-3">
+                <span className="font-semibold text-success">جاهزة للترحيل</span>
+                {' — الأقلام الإلزامية مكتملة'}
+              </p>
+              <button
+                type="button"
+                className="btn-success"
+                onClick={() => postMutation.mutate()}
+                disabled={postMutation.isPending}
+              >
+                {postMutation.isPending ? 'جاري الترحيل...' : 'ترحيل لليوميات'}
+              </button>
+            </div>
+          )}
+          {!canPost && progress.missing?.length > 0 && (
+            <p className="text-xs text-warning px-1">
+              أكمل: {progress.missing.join('، ')} — أو احفظ التعديلات إن كنت قد أدخلتها للتو
+            </p>
+          )}
+          {!canPost && !progress.missing?.length && stage === 'wip' && !hasPermission(PERM.SHIPMENTS_POST) && (
+            <p className="text-xs text-warning px-1">
+              الأقلام مكتملة — تحتاج صلاحية «ترحيل السيارات» لإظهار زر الترحيل
+            </p>
+          )}
+        </div>
       )}
 
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
@@ -294,18 +322,8 @@ export default function ShipmentDetailPage() {
         </div>
       )}
 
-      {/* Actions — معلقة: ترحيل | مرحّلة: التسليم في البطاقة أعلاه */}
+      {/* Actions */}
       <div className="flex gap-3 flex-wrap">
-        {canPost && (
-          <button
-            type="button"
-            className="btn-success"
-            onClick={() => postMutation.mutate()}
-            disabled={postMutation.isPending}
-          >
-            ترحيل لليوميات
-          </button>
-        )}
         {canRemove && (
           <button
             type="button"

@@ -17,7 +17,7 @@ const {
   PRICE_FIELDS,
 } = require('../engine/clearance')
 const { classifyPostability } = require('../engine/statement')
-const { syncLegacyFromDual } = require('../engine/dualLedger')
+const { syncLegacyFromDual, buildLegacySyncPatch } = require('../engine/dualLedger')
 const { validateShipmentFinancials } = require('../engine/validation')
 const { round2 } = require('../engine/numbers')
 const { describeShipmentUpdate } = require('../utils/shipmentUpdateDisplay')
@@ -38,7 +38,21 @@ const FINANCIAL_FIELDS = [
 const DUAL_FIELDS = [...COST_FIELDS, ...PRICE_FIELDS]
 
 class ShipmentService {
+  /** يملأ tarseem/syrian_driver/clearance_fee من cost/price إن وُجدت قيم دون تكرار يدوي */
+  repairLegacyFromDual(shipmentId, userId = null) {
+    const shipment = ShipmentModel.findById(shipmentId)
+    const patch = buildLegacySyncPatch(shipment)
+    if (!Object.keys(patch).length) return shipment
+
+    ShipmentModel.update(shipmentId, {
+      ...patch,
+      ...(userId ? { updated_by: userId } : {}),
+    })
+    return ShipmentModel.findById(shipmentId)
+  }
+
   getCompletionProgress(shipmentId) {
+    this.repairLegacyFromDual(shipmentId)
     const shipment = ShipmentModel.findById(shipmentId)
     const { is_postable, missing } = classifyPostability(shipment)
     const required = SHIPMENT_REQUIRED_FIELDS.required.length
@@ -164,6 +178,7 @@ class ShipmentService {
   }
 
   postShipment(shipmentId, userId) {
+    this.repairLegacyFromDual(shipmentId, userId)
     const shipment = ShipmentModel.findById(shipmentId)
 
     if (shipment.status === SHIPMENT_STATUS.POSTED) {
@@ -323,7 +338,10 @@ class ShipmentService {
   }
 
   _filterPostable(rows) {
-    return rows.filter((row) => classifyPostability(row).is_postable)
+    return rows.filter((row) => {
+      this.repairLegacyFromDual(row.id)
+      return classifyPostability(ShipmentModel.findById(row.id)).is_postable
+    })
   }
 
   countReadyToPost() {
@@ -382,6 +400,7 @@ class ShipmentService {
 
   getById(id) {
     ShipmentModel.findById(id)
+    this.repairLegacyFromDual(id)
     const shipment = ShipmentModel.findWithDetails(id)
     return {
       ...shipment,
