@@ -1,5 +1,7 @@
 const BaseModel = require('./BaseModel')
 const { buildShipmentListFilters } = require('./shipmentListQuery')
+const { brokerShipmentValue, traderShipmentValue } = require('../engine/dualLedger')
+const { round2 } = require('../engine/numbers')
 
 class ShipmentModel extends BaseModel {
   constructor() {
@@ -92,6 +94,44 @@ class ShipmentModel extends BaseModel {
     return this.sumByCenterAndStatuses(centerId, [status])
   }
 
+  _sumShipmentValues(rows, valueFn) {
+    const count = rows.length
+    const total = round2(rows.reduce((sum, row) => sum + valueFn(row), 0))
+    return { count, total }
+  }
+
+  /** ذمة التاجر: WIP / مرحّل غير مُسلّم حسب center_id */
+  sumTraderByCenterAndStatuses(centerId, statuses) {
+    const placeholders = statuses.map(() => '?').join(', ')
+    const rows = this.db
+      .prepare(
+        `SELECT * FROM shipments
+         WHERE center_id = ? AND status IN (${placeholders}) AND is_deleted = 0`
+      )
+      .all(centerId, ...statuses)
+    return this._sumShipmentValues(rows, traderShipmentValue)
+  }
+
+  sumTraderByCenterAndStatus(centerId, status) {
+    return this.sumTraderByCenterAndStatuses(centerId, [status])
+  }
+
+  /** ذمة المخلص: WIP / مرحّل غير مُسلّم حسب clearance_center_id وتكلفة cost_* */
+  sumByClearanceCenterAndStatuses(clearanceCenterId, statuses) {
+    const placeholders = statuses.map(() => '?').join(', ')
+    const rows = this.db
+      .prepare(
+        `SELECT * FROM shipments
+         WHERE clearance_center_id = ? AND status IN (${placeholders}) AND is_deleted = 0`
+      )
+      .all(clearanceCenterId, ...statuses)
+    return this._sumShipmentValues(rows, brokerShipmentValue)
+  }
+
+  sumByClearanceCenterAndStatus(clearanceCenterId, status) {
+    return this.sumByClearanceCenterAndStatuses(clearanceCenterId, [status])
+  }
+
   findByBroker(brokerId, { status, limit = 50, offset = 0 } = {}) {
     const conditions = ['clearance_center_id = ?', 'is_deleted = 0']
     const params = [brokerId]
@@ -116,8 +156,9 @@ class ShipmentModel extends BaseModel {
   }
 
   findReadyToPost({ limit = 50, offset = 0 } = {}) {
+    // توافق خلفي — الخدمة تُصفّي حسب قابلية الترحيل لا حالة complete
     return this.findAll({
-      filters: { status: 'complete' },
+      filters: { status: 'pending' },
       orderBy: 'entry_date ASC',
       limit,
       offset,

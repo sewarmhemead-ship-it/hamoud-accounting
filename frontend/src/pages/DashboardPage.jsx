@@ -32,8 +32,8 @@ export default function DashboardPage() {
   })
 
   const { data: readyRes } = useQuery({
-    queryKey: ['shipments', 'complete', 'dashboard-queue'],
-    queryFn: () => shipmentsApi.list({ status: 'complete', limit: 5 }),
+    queryKey: ['shipments', 'ready', 'dashboard-queue'],
+    queryFn: () => shipmentsApi.ready({ limit: 5 }),
     enabled: !!dashRes?.data,
     staleTime: 60_000,
   })
@@ -68,18 +68,16 @@ export default function DashboardPage() {
       ? Math.round(((todayNet - yestNet) / Math.abs(yestNet)) * 100)
       : null
 
-  const wipCount =
-    (shipments.pending.count || 0) + (shipments.complete.count || 0)
-  const wipVal =
-    (shipments.pending.total_value || 0) + (shipments.complete.total_value || 0)
+  const wipCount = shipments.pending.count || 0
+  const wipVal = shipments.pending.total_value || 0
+  const readyCount = shipments.ready_to_post?.count ?? shipments.complete?.count ?? 0
   const pipelineExpenses =
     wipVal + (shipments.posted.total_value || 0)
   const officeToday = today.closed?.office_expenses ?? 0
   const netToday = today.closed?.net_profit ?? todayNet
 
   const lifecycleCounts = {
-    pending: shipments.pending.count || 0,
-    complete: shipments.complete.count || 0,
+    pending: wipCount,
     posted: shipments.posted.count || 0,
     delivered: shipments.delivered?.count || 0,
   }
@@ -111,9 +109,9 @@ export default function DashboardPage() {
         />
         <KpiStatCard
           icon="⏳"
-          label="WIP (معلقة + مكتملة)"
+          label="WIP (معلقة)"
           value={wipVal}
-          sub={`${wipCount} سيارة`}
+          sub={`${wipCount} سيارة${readyCount ? ` · ${readyCount} جاهزة` : ''}`}
           tone="warning"
           to="/shipments/wip"
         />
@@ -290,9 +288,9 @@ export default function DashboardPage() {
         >
           <div>
             <p className="text-3xl font-extrabold text-warning tabular-nums">
-              {shipments.complete.count || 0}
+              {readyCount}
             </p>
-            <p className="text-sm text-ink-soft mt-1">جاهزة للترحيل</p>
+            <p className="text-sm text-ink-soft mt-1">قابلة للترحيل</p>
           </div>
           <span className="text-2xl opacity-60 group-hover:opacity-100">✅</span>
         </Link>

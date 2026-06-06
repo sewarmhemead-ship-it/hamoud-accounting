@@ -13,7 +13,13 @@ const {
   PRICE_FIELD_LABELS,
   calculateCostTotal,
   calculatePriceTotal,
+  calculateShipmentTotal,
+  resolveTotalCost,
 } = require('./clearance')
+const {
+  hasActiveDualLedger,
+  missingRequiredFields,
+} = require('./dualLedger')
 
 /**
  * الترتيب القياسي لأعمدة التكلفة في كشف التخليص (يطابق ترتيب كشوف المخلصين الفعلية:
@@ -70,9 +76,7 @@ function classifyPostability(
     return { state: POSTABILITY.POSTED, label: POSTABILITY_LABEL.posted, missing: [], is_postable: false }
   }
 
-  const missing = requiredFields
-    .filter((f) => shipment[f] === null || shipment[f] === undefined)
-    .map((f) => SHIPMENT_FIELD_LABELS[f] || f)
+  const missing = missingRequiredFields(shipment, requiredFields)
 
   const state = missing.length === 0 ? POSTABILITY.POSTABLE : POSTABILITY.INCOMPLETE
   return {
@@ -91,26 +95,52 @@ function classifyPostability(
  * @returns {{ key:string, label:string }[]}
  */
 function detectCostColumns(shipments = []) {
-  const used = new Set()
+  const usedLegacy = new Set()
+  const usedDual = new Set()
   for (const s of shipments) {
     for (const field of CLEARANCE_FIELD_ORDER) {
       const v = s[field]
-      if (v !== null && v !== undefined && Number(v) !== 0) used.add(field)
+      if (v !== null && v !== undefined && Number(v) !== 0) usedLegacy.add(field)
+    }
+    if (hasActiveDualLedger(s)) {
+      for (const field of COST_FIELDS) {
+        const v = s[field]
+        if (v !== null && v !== undefined && Number(v) !== 0) usedDual.add(field)
+      }
     }
   }
-  return CLEARANCE_FIELD_ORDER.filter((f) => used.has(f)).map((f) => ({
+
+  if (usedDual.size > 0) {
+    return COST_FIELDS.filter((f) => usedDual.has(f)).map((f) => ({
+      key: f,
+      label: COST_FIELD_LABELS[f] || f,
+    }))
+  }
+
+  return CLEARANCE_FIELD_ORDER.filter((f) => usedLegacy.has(f)).map((f) => ({
     key: f,
     label: SHIPMENT_FIELD_LABELS[f] || f,
   }))
 }
 
 function truckRow(shipment, requiredFields) {
-  const costs = {}
-  for (const field of CLEARANCE_FIELD_ORDER) {
-    costs[field] = toFiniteNumber(shipment[field], SHIPMENT_FIELD_LABELS[field] || field)
-  }
-  const total = round2(Object.values(costs).reduce((a, b) => a + b, 0))
   const postability = classifyPostability(shipment, requiredFields)
+  const { clearanceAmount } = resolveTotalCost(shipment)
+
+  let costs = {}
+  if (hasActiveDualLedger(shipment)) {
+    for (const field of COST_FIELDS) {
+      costs[field] = toFiniteNumber(shipment[field], COST_FIELD_LABELS[field] || field)
+    }
+  } else {
+    for (const field of CLEARANCE_FIELD_ORDER) {
+      costs[field] = toFiniteNumber(shipment[field], SHIPMENT_FIELD_LABELS[field] || field)
+    }
+  }
+  const total = hasActiveDualLedger(shipment)
+    ? round2(calculateCostTotal(shipment))
+    : round2(calculateShipmentTotal(shipment))
+  const displayTotal = clearanceAmount > 0 || hasActiveDualLedger(shipment) ? clearanceAmount : total
 
   return {
     kind: 'truck',
@@ -125,7 +155,7 @@ function truckRow(shipment, requiredFields) {
     weight: shipment.weight ?? null,
     quantity: shipment.quantity ?? null,
     costs,
-    total,
+    total: displayTotal,
     state: postability.state,
     state_label: postability.label,
     missing: postability.missing,
@@ -134,14 +164,29 @@ function truckRow(shipment, requiredFields) {
 }
 
 function paymentRow(payment) {
+  const isOffset = payment.category === 'offset'
   return {
-    kind: 'payment',
+    kind: isOffset ? 'offset_payment' : 'payment',
     id: payment.id,
     ref_number: payment.ref_number || null,
     date: payment.date || null,
-    label: payment.notes || 'دفعة',
+    label: payment.notes || (isOffset ? 'مقاصة' : 'دفعة'),
     amount: round2(toFiniteNumber(payment.amount_usd ?? payment.amount, 'مبلغ الدفعة')),
     tx_type: payment.type || null,
+    category: payment.category || null,
+  }
+}
+
+function offsetChargeRow(tx) {
+  return {
+    kind: 'offset_charge',
+    id: tx.id,
+    ref_number: tx.ref_number || null,
+    date: tx.date || null,
+    label: tx.notes || 'مقاصة',
+    amount: round2(toFiniteNumber(tx.amount_usd ?? tx.amount, 'مبلغ المقاصة')),
+    tx_type: tx.type || null,
+    category: tx.category || null,
   }
 }
 
@@ -170,23 +215,28 @@ function sortByDate(a, b) {
 function buildBrokerStatement({
   shipments = [],
   payments = [],
+  offsetCharges = [],
   centerType = CENTER_TYPE.BROKER,
   requiredFields = SHIPMENT_REQUIRED_FIELDS.required,
 } = {}) {
-  if (!Array.isArray(shipments) || !Array.isArray(payments)) {
+  if (!Array.isArray(shipments) || !Array.isArray(payments) || !Array.isArray(offsetCharges)) {
     throw new CalculationError('بيانات الكشف غير صالحة')
   }
 
   const truckRows = shipments.map((s) => truckRow(s, requiredFields))
   const paymentRows = payments.map(paymentRow)
+  const offsetChargeRows = offsetCharges.map(offsetChargeRow)
 
-  // الكشف الفعلي (Ledger): السيارات المُرحَّلة/المُسلَّمة + كل الدفعات
+  // الكشف الفعلي (Ledger): السيارات المُرحَّلة/المُسلَّمة + مقاصة (out) + الدفعات/مقاصة (in)
   const postedTrucks = truckRows.filter(
     (r) => r.state === POSTABILITY.POSTED || r.state === POSTABILITY.DELIVERED
   )
-  const ledgerRows = [...postedTrucks, ...paymentRows].sort(sortByDate)
+  const ledgerRows = [...postedTrucks, ...offsetChargeRows, ...paymentRows].sort(sortByDate)
 
-  const chargesPosted = round2(postedTrucks.reduce((a, r) => a + r.total, 0))
+  const chargesPosted = round2(
+    postedTrucks.reduce((a, r) => a + r.total, 0) +
+      offsetChargeRows.reduce((a, r) => a + r.amount, 0)
+  )
   const paymentsTotal = round2(paymentRows.reduce((a, r) => a + r.amount, 0))
   const balance = round2(chargesPosted - paymentsTotal)
 

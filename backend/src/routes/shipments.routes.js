@@ -25,5 +25,6 @@ router.get('/:id/progress', requirePermission(PERM.SHIPMENTS_VIEW), shipmentCont
 router.patch('/:id/fields', requirePermission(PERM.SHIPMENTS_EDIT), validate(updateFieldsSchema), auditMiddleware('update', 'shipment'), shipmentController.updateFields)
 router.post('/:id/post', requirePermission(PERM.SHIPMENTS_POST), auditMiddleware('post', 'shipment'), shipmentController.post)
 router.patch('/:id/deliver', requirePermission(PERM.SHIPMENTS_DELIVER), auditMiddleware('deliver', 'shipment'), shipmentController.deliver)
+router.delete('/:id', requirePermission(PERM.SHIPMENTS_EDIT), auditMiddleware('delete', 'shipment'), shipmentController.remove)
 
 module.exports = router

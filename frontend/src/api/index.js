@@ -36,6 +36,7 @@ export const shipmentsApi = {
   deliver: (id) => client.patch(`/shipments/${id}/deliver`),
   ready: (params) => client.get('/shipments/ready', { params }),
   bulkPost: (shipment_ids) => client.post('/shipments/bulk-post', { shipment_ids }),
+  remove: (id) => client.delete(`/shipments/${id}`),
 }
 
 export const transactionsApi = {

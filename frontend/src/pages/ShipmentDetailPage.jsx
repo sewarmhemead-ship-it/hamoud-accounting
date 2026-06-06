@@ -66,6 +66,17 @@ export default function ShipmentDetailPage() {
     onError: (err) => showToast(err.message, 'error'),
   })
 
+  const removeMutation = useMutation({
+    mutationFn: () => shipmentsApi.remove(id),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['centers'] })
+      queryClient.invalidateQueries({ queryKey: ['shipments'] })
+      showToast('تم حذف السيارة', 'success')
+      navigate('/shipments/wip')
+    },
+    onError: (err) => showToast(err.message, 'error'),
+  })
+
   if (isLoading) return (
     <div className="space-y-4">
       <div className="h-6 w-48 rounded-lg bg-white/5 animate-pulse" />
@@ -78,11 +89,14 @@ export default function ShipmentDetailPage() {
 
   const progress = s.progress || {}
   const canEdit = s.status === 'pending' || s.status === 'complete'
-  const canPost = s.status === 'complete'
+  const canPost = progress.is_complete && (s.status === 'pending' || s.status === 'complete')
   const canDeliver = s.status === 'posted'
+  const canRemove = s.status === 'pending' || s.status === 'complete' || s.status === 'posted'
 
   // تحقق هل السيارة تستخدم نظام الكشف المزدوج
-  const hasDual = DUAL_COST_FIELDS.some(([k]) => s[k] != null) || DUAL_PRICE_FIELDS.some(([k]) => s[k] != null)
+  const hasDual =
+    DUAL_COST_FIELDS.some(([k]) => Number(s[k]) > 0) ||
+    DUAL_PRICE_FIELDS.some(([k]) => Number(s[k]) > 0)
 
   const saveFields = () => {
     const hasChanges = Object.entries(editFields).some(([, v]) => v !== '')
@@ -137,7 +151,7 @@ export default function ShipmentDetailPage() {
       <PageHeader
         title={s.ref_number}
         subtitle={`${s.source} → ${s.destination}`}
-        actions={<StatusBadge status={s.status} />}
+        actions={<StatusBadge status={s.status} postable={progress.is_complete} />}
       />
 
       <ShipmentLifecycle currentStatus={s.status} />
@@ -251,6 +265,18 @@ export default function ShipmentDetailPage() {
             disabled={deliverMutation.isPending}
           >
             تسجيل التسليم
+          </button>
+        )}
+        {canRemove && (
+          <button
+            type="button"
+            className="btn-danger"
+            onClick={() => {
+              if (window.confirm('حذف السيارة وعكس قيودها إن وُجدت؟')) removeMutation.mutate()
+            }}
+            disabled={removeMutation.isPending}
+          >
+            حذف السيارة
           </button>
         )}
       </div>

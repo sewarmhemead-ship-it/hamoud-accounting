@@ -63,23 +63,46 @@ const shipmentController = {
     res.json(apiResponse.success(shipment, 'تم تسجيل التسليم'))
   }),
 
+  remove: asyncHandler(async (req, res) => {
+    const result = ShipmentService.removeShipment(parseInt(req.params.id, 10), req.user.id)
+    res.json(apiResponse.success(result, 'تم حذف السيارة'))
+  }),
+
   readyToPost: asyncHandler(async (req, res) => {
-    const { limit = 50, offset = 0 } = req.query
+    const { limit = 50, offset = 0, search, from, to } = req.query
     const result = ShipmentService.getReadyToPost({
       limit: parseInt(limit, 10),
       offset: parseInt(offset, 10),
+      search: search?.trim() ? normalizeSearchQuery(search) : undefined,
+      from,
+      to,
     })
     res.json(apiResponse.paginated(result.rows, result.total, result.limit, result.offset))
   }),
 
   summary: asyncHandler(async (req, res) => {
-    const statuses = ['pending', 'complete', 'posted', 'delivered']
-    const summary = {}
-    for (const status of statuses) {
-      const row = ShipmentModel.sumGlobalByStatus(status)
-      summary[status] = { count: row.count, total_value: row.total }
-    }
-    res.json(apiResponse.success(summary))
+    const [pendingDb, legacyComplete, posted, delivered] = ['pending', 'complete', 'posted', 'delivered'].map(
+      (s) => ShipmentModel.sumGlobalByStatus(s)
+    )
+    const readyToPost = ShipmentService.countReadyToPost()
+    res.json(
+      apiResponse.success({
+        pending: {
+          count: pendingDb.count + legacyComplete.count,
+          total_value: pendingDb.total + legacyComplete.total,
+        },
+        ready_to_post: {
+          count: readyToPost.count,
+          total_value: readyToPost.total_value,
+        },
+        complete: {
+          count: readyToPost.count,
+          total_value: readyToPost.total_value,
+        },
+        posted: { count: posted.count, total_value: posted.total },
+        delivered: { count: delivered.count, total_value: delivered.total },
+      })
+    )
   }),
 }
 

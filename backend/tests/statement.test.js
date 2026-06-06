@@ -53,6 +53,17 @@ describe('classifyPostability — حالة الترحيل', () => {
   it('مدخل غير صالح ⇒ CalculationError', () => {
     expect(() => classifyPostability(null)).toThrow(CalculationError)
   })
+
+  it('سيارة مزدوجة بأقلام cost/price ⇒ قابلة للترحيل بدون legacy', () => {
+    const r = classifyPostability({
+      status: 'complete',
+      cost_tarseem: 2000,
+      price_syrian_driver: 400,
+      cost_clearance_fee: 30,
+    })
+    expect(r.is_postable).toBe(true)
+    expect(r.missing).toEqual([])
+  })
 })
 
 describe('detectCostColumns — كشف الأعمدة المستخدمة بنفس الترتيبة', () => {
@@ -148,6 +159,28 @@ describe('buildBrokerStatement — الكشف الموحّد', () => {
     })
     // موجب وللتاجر يعني «لنا»
     expect(stmt.totals.direction).toBe('لنا')
+  })
+
+  it('سيارة مزدوجة مُرحَّلة — مجموع الكشف = cost_*', () => {
+    const stmt = buildBrokerStatement({
+      shipments: [
+        {
+          id: 10,
+          status: 'posted',
+          entry_date: '2026-03-01',
+          goods_name: 'رز',
+          cost_tarseem: 2000,
+          cost_turkish_driver: 400,
+          cost_clearance_fee: 30,
+          price_tarseem: 2100,
+          price_syrian_driver: 420,
+        },
+      ],
+      payments: [],
+      centerType: 'broker',
+    })
+    expect(stmt.totals.charges_posted).toBe(2430)
+    expect(stmt.rows[0].total).toBe(2430)
   })
 
   it('كشف فارغ تماماً ⇒ أصفار', () => {

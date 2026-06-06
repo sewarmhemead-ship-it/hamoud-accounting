@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react'
+import { useState, useCallback, useMemo } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { Link } from 'react-router-dom'
 import { shipmentsApi } from '../api'
@@ -29,8 +29,8 @@ function DaysChip({ days }) {
 
 const WIP_STATUS_FILTERS = [
   { value: '', label: 'الكل' },
-  { value: 'pending', label: 'معلقة' },
-  { value: 'complete', label: 'مكتملة' },
+  { value: 'incomplete', label: 'أقلام ناقصة' },
+  { value: 'postable', label: 'قابلة للترحيل' },
 ]
 
 export default function WipPage() {
@@ -49,15 +49,9 @@ export default function WipPage() {
     limit: 200,
   })
 
-  const { data: pendingRes, isLoading: l1, isFetching: f1 } = useQuery({
-    queryKey: ['shipments', 'wip-pending', debouncedSearch, from, to],
+  const { data: wipRes, isLoading, isFetching } = useQuery({
+    queryKey: ['shipments', 'wip', debouncedSearch, from, to],
     queryFn: () => shipmentsApi.list({ ...listParams, status: 'pending' }),
-    enabled: status !== 'complete',
-  })
-  const { data: completeRes, isLoading: l2, isFetching: f2 } = useQuery({
-    queryKey: ['shipments', 'wip-complete', debouncedSearch, from, to],
-    queryFn: () => shipmentsApi.list({ ...listParams, status: 'complete' }),
-    enabled: status !== 'pending',
   })
 
   const clearFilters = useCallback(() => {
@@ -67,45 +61,52 @@ export default function WipPage() {
     setTo('')
   }, [])
 
-  const pending  = pendingRes?.data  || []
-  const complete = completeRes?.data || []
-  const all = [
-    ...complete.map((s) => ({ ...s, _priority: 1 })), // مكتملة أولاً
-    ...pending.map((s)  => ({ ...s, _priority: 2 })), // معلقة ثانياً
-  ]
-  const total = all.reduce((s, r) => s + (r.total_cost || 0), 0)
+  const rows = wipRes?.data || []
+  const filtered = useMemo(() => {
+    if (status === 'postable') {
+      return rows.filter((s) => s.progress?.is_complete)
+    }
+    if (status === 'incomplete') {
+      return rows.filter((s) => !s.progress?.is_complete)
+    }
+    return rows
+  }, [rows, status])
 
-  // ترتيب: الأقدم أولاً (أكثر أيام انتظاراً)
-  const sorted = [...all].sort((a, b) => {
+  const postableCount = rows.filter((s) => s.progress?.is_complete).length
+  const incompleteCount = rows.length - postableCount
+  const total = filtered.reduce((s, r) => s + (r.total_cost || 0), 0)
+
+  const sorted = [...filtered].sort((a, b) => {
     const da = new Date(a.entry_date || 0)
     const db = new Date(b.entry_date || 0)
     return da - db
   })
 
-  const isLoading = l1 || l2 || f1 || f2 || searchPending
+  const listBusy = isLoading || isFetching || searchPending
 
   return (
     <div className="space-y-5">
       <PageHeader
         title="سيارات معلقة (WIP)"
-        subtitle={`${pending.length} معلقة + ${complete.length} مكتملة = ${formatCurrency(total)}`}
+        subtitle={`${rows.length} معلقة — ${postableCount} قابلة للترحيل = ${formatCurrency(rows.reduce((s, r) => s + (r.total_cost || 0), 0))}`}
       />
 
-      {/* بطاقات الملخص */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
         <div className="stat-card tone-amber">
           <p className="text-[11px] text-ink-faint mb-1.5">معلقة</p>
-          <p className="text-2xl font-bold text-warning">{pending.length}</p>
-          <p className="text-[10px] text-ink-faint mt-1">أقلام ناقصة</p>
+          <p className="text-2xl font-bold text-warning">{rows.length}</p>
+          <p className="text-[10px] text-ink-faint mt-1">قيد التجهيز</p>
         </div>
         <div className="stat-card tone-gold">
-          <p className="text-[11px] text-ink-faint mb-1.5">مكتملة</p>
-          <p className="text-2xl font-bold text-accent">{complete.length}</p>
-          <p className="text-[10px] text-ink-faint mt-1">جاهزة للترحيل</p>
+          <p className="text-[11px] text-ink-faint mb-1.5">قابلة للترحيل</p>
+          <p className="text-2xl font-bold text-accent">{postableCount}</p>
+          <Link to="/shipments/ready" className="text-[10px] text-accent hover:underline mt-1 inline-block">
+            صفحة الترحيل ←
+          </Link>
         </div>
         <div className="stat-card tone-blue">
-          <p className="text-[11px] text-ink-faint mb-1.5">إجمالي القيمة</p>
-          <p className="text-lg font-bold text-info tabular-nums">{formatCurrency(total)}</p>
+          <p className="text-[11px] text-ink-faint mb-1.5">أقلام ناقصة</p>
+          <p className="text-2xl font-bold text-info">{incompleteCount}</p>
         </div>
         <div className="stat-card tone-red">
           <p className="text-[11px] text-ink-faint mb-1.5">أقدم سيارة</p>
@@ -116,7 +117,9 @@ export default function WipPage() {
               </p>
               <p className="text-[10px] text-ink-faint mt-1">يوم</p>
             </>
-          ) : <p className="text-ink-faint">—</p>}
+          ) : (
+            <p className="text-ink-faint">—</p>
+          )}
         </div>
       </div>
 
@@ -131,10 +134,10 @@ export default function WipPage() {
         onToChange={setTo}
         onClear={clearFilters}
         statusFilters={WIP_STATUS_FILTERS}
-        busy={isLoading}
+        busy={listBusy}
       />
 
-      {isLoading ? (
+      {listBusy && sorted.length === 0 ? (
         <div className="card text-center py-10 text-ink-faint">جاري التحميل...</div>
       ) : sorted.length === 0 ? (
         <div className="card text-center py-12 text-ink-faint">
@@ -154,12 +157,15 @@ export default function WipPage() {
             </thead>
             <tbody>
               {sorted.map((s) => {
-                const days   = daysSince(s.entry_date)
-                const isOld  = days !== null && days > 7
+                const days = daysSince(s.entry_date)
+                const isOld = days !== null && days > 7
+                const postable = s.progress?.is_complete
                 return (
-                  <tr key={s.id}
-                      style={{ borderBottom: '1px solid rgba(255,255,255,0.03)' }}
-                      className={`hover:bg-white/[0.025] transition-colors ${isOld ? 'bg-warning/[0.02]' : ''}`}>
+                  <tr
+                    key={s.id}
+                    style={{ borderBottom: '1px solid rgba(255,255,255,0.03)' }}
+                    className={`hover:bg-white/[0.025] transition-colors ${isOld ? 'bg-warning/[0.02]' : ''}`}
+                  >
                     <td className="py-2.5 px-3">
                       <Link to={`/shipments/${s.id}`} className="text-accent hover:text-accent-hover font-mono text-xs">
                         {s.ref_number}
@@ -173,9 +179,11 @@ export default function WipPage() {
                     <td className="py-2.5 px-3 text-ink-faint text-xs whitespace-nowrap">{formatDate(s.entry_date)}</td>
                     <td className="py-2.5 px-3 text-center"><DaysChip days={days} /></td>
                     <td className="py-2.5 px-3 text-xs tabular-nums">{formatCurrency(s.total_cost || 0)}</td>
-                    <td className="py-2.5 px-3"><StatusBadge status={s.status} /></td>
                     <td className="py-2.5 px-3">
-                      {s.status === 'pending' && s.progress?.missing?.length > 0 && (
+                      <StatusBadge status={s.status} postable={postable} />
+                    </td>
+                    <td className="py-2.5 px-3">
+                      {!postable && s.progress?.missing?.length > 0 && (
                         <span className="text-[11px] text-warning">
                           {s.progress.missing.slice(0, 2).join('، ')}
                           {s.progress.missing.length > 2 && ` +${s.progress.missing.length - 2}`}

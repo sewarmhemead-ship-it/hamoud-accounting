@@ -31,7 +31,11 @@ function buildShipmentListFilters(filters = {}) {
     conditions.push('s.center_id = ?')
     params.push(filters.center_id)
   }
-  if (filters.status) {
+  if (filters.status_in?.length) {
+    const placeholders = filters.status_in.map(() => '?').join(', ')
+    conditions.push(`s.status IN (${placeholders})`)
+    params.push(...filters.status_in)
+  } else if (filters.status) {
     conditions.push('s.status = ?')
     params.push(filters.status)
   }

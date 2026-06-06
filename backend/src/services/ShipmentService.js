@@ -17,6 +17,7 @@ const {
   PRICE_FIELDS,
 } = require('../engine/clearance')
 const { classifyPostability } = require('../engine/statement')
+const { syncLegacyFromDual } = require('../engine/dualLedger')
 const { validateShipmentFinancials } = require('../engine/validation')
 const { round2 } = require('../engine/numbers')
 const { describeShipmentUpdate } = require('../utils/shipmentUpdateDisplay')
@@ -74,30 +75,10 @@ class ShipmentService {
 
     // عند الإدخال المزدوج: نعكس الأقلام الإلزامية القديمة من الجانبين كي تعمل
     // دورة الحياة (اكتمال/قابلية ترحيل) دون تكرار يدوي.
-    if (hasDual) {
-      if (financial.tarseem == null && (dual.cost_tarseem != null || dual.price_tarseem != null)) {
-        financial.tarseem = dual.cost_tarseem ?? dual.price_tarseem
-      }
-      if (
-        financial.clearance_fee == null &&
-        (dual.cost_clearance_fee != null || dual.price_clearance_fee != null)
-      ) {
-        financial.clearance_fee = dual.cost_clearance_fee ?? dual.price_clearance_fee
-      }
-      if (
-        financial.syrian_driver == null &&
-        (dual.price_syrian_driver != null || dual.cost_turkish_driver != null)
-      ) {
-        financial.syrian_driver = dual.price_syrian_driver ?? dual.cost_turkish_driver
-      }
-    }
+    Object.assign(financial, syncLegacyFromDual(financial, dual))
 
-    // ملاحظة: لا تُحتسب ضريبة 2% تلقائياً — فهي مدموجة أصلاً في الترسيم لدى المخلص
-    // (مثال باب الهوى: المجموع = ترسيم + سائق + تخليص بدون أي إضافة).
-    // يبقى tax_2pct حقلاً اختيارياً يُدخَل يدوياً عند الحاجة فقط.
-
-    // المجموع — resolveTotalCost هو المصدر الوحيد لهذا القرار
-    const resolved = resolveTotalCost(hasDual ? dual : financial)
+    const mergedForTotal = { ...financial, ...dual }
+    const resolved = resolveTotalCost(mergedForTotal)
     const total_cost = resolved.traderAmount
 
     const shipment = ShipmentModel.create({
@@ -120,14 +101,6 @@ class ShipmentService {
       notes: data.notes || null,
       created_by: userId,
     })
-
-    if (classifyPostability(shipment).is_postable) {
-      return ShipmentModel.update(shipment.id, {
-        status: SHIPMENT_STATUS.COMPLETE,
-        completed_at: nowISO(),
-        updated_by: userId,
-      })
-    }
 
     return shipment
   }
@@ -169,26 +142,22 @@ class ShipmentService {
       }
 
       const merged = { ...shipment, ...updates }
-      updates.total_cost = resolveTotalCost(merged).traderAmount
+      const financialPatch = {}
+      const dualPatch = {}
+      for (const field of FINANCIAL_FIELDS) {
+        if (merged[field] !== undefined) financialPatch[field] = merged[field]
+      }
+      for (const field of DUAL_FIELDS) {
+        if (merged[field] !== undefined) dualPatch[field] = merged[field]
+      }
+      const syncedLegacy = syncLegacyFromDual(financialPatch, dualPatch)
+      Object.assign(updates, syncedLegacy)
+
+      const mergedAfterSync = { ...merged, ...syncedLegacy }
+      updates.total_cost = resolveTotalCost(mergedAfterSync).traderAmount
       updates.updated_by = userId
 
       ShipmentModel.update(shipmentId, updates)
-      const updated = ShipmentModel.findById(shipmentId)
-      const { is_postable } = classifyPostability(updated)
-
-      if (is_postable && updated.status === SHIPMENT_STATUS.PENDING) {
-        ShipmentModel.update(shipmentId, {
-          status: SHIPMENT_STATUS.COMPLETE,
-          completed_at: nowISO(),
-          updated_by: userId,
-        })
-      } else if (!is_postable && updated.status === SHIPMENT_STATUS.COMPLETE) {
-        ShipmentModel.update(shipmentId, {
-          status: SHIPMENT_STATUS.PENDING,
-          completed_at: null,
-          updated_by: userId,
-        })
-      }
 
       return ShipmentModel.findWithDetails(shipmentId)
     })
@@ -203,22 +172,25 @@ class ShipmentService {
     if (shipment.status === SHIPMENT_STATUS.DELIVERED) {
       throw new BusinessRuleError('السيارة مُسلَّمة مسبقاً')
     }
-    if (shipment.status !== SHIPMENT_STATUS.COMPLETE) {
-      const { missing } = classifyPostability(shipment)
+    const { is_postable, missing } = classifyPostability(shipment)
+    if (!is_postable) {
       throw new BusinessRuleError(
-        `السيارة غير مكتملة. الأقلام الناقصة: ${missing.join('، ')}`
+        `السيارة غير جاهزة للترحيل. الأقلام الناقصة: ${missing.join('، ')}`
       )
     }
 
     return ShipmentModel.transaction(() => {
       const now = new Date().toISOString()
+      const entryDay =
+        shipment.entry_date && String(shipment.entry_date).slice(0, 10)
+      const postedAt = entryDay ? `${entryDay}T12:00:00.000Z` : now
       const { traderAmount, clearanceAmount } = resolveTotalCost(shipment)
       const noteBase = `تخليص ${shipment.goods_name || ''} ${shipment.source} → ${shipment.destination} - ${shipment.ref_number}`
 
       // قيد 1: على التاجر (مدين لنا بالفاتورة)
       const traderTx = TransactionModel.create({
         ref_number: generateRef(REF_PREFIX.TRANSACTION),
-        date: now,
+        date: postedAt,
         type: 'out',
         center_id: shipment.center_id,
         currency: CURRENCY.USD,
@@ -236,7 +208,7 @@ class ShipmentService {
       if (shipment.clearance_center_id) {
         clearanceTx = TransactionModel.create({
           ref_number: generateRef(REF_PREFIX.TRANSACTION),
-          date: now,
+          date: postedAt,
           type: 'out',
           center_id: shipment.clearance_center_id,
           currency: CURRENCY.USD,
@@ -252,7 +224,7 @@ class ShipmentService {
 
       ShipmentModel.update(shipmentId, {
         status: SHIPMENT_STATUS.POSTED,
-        posted_at: now,
+        posted_at: postedAt,
         transaction_id: traderTx.id, // توافق خلفي مع markDelivered
         trader_transaction_id: traderTx.id,
         clearance_transaction_id: clearanceTx ? clearanceTx.id : null,
@@ -312,6 +284,37 @@ class ShipmentService {
     })
   }
 
+  /**
+   * إلغاء/حذف سيارة — يُحدّث WIP أو يعكس قيود الترحيل قبل الحذف الناعم.
+   * pending/complete: حذف فقط. posted/delivered: حذف القيود المرتبطة ثم الحذف.
+   */
+  removeShipment(shipmentId, userId) {
+    const shipment = ShipmentModel.findById(shipmentId)
+
+    return ShipmentModel.transaction(() => {
+      if (
+        shipment.status === SHIPMENT_STATUS.POSTED ||
+        shipment.status === SHIPMENT_STATUS.DELIVERED
+      ) {
+        const txs = TransactionModel.findByShipment(shipmentId)
+        for (const tx of txs) {
+          TransactionModel.softDelete(tx.id)
+        }
+      }
+
+      ShipmentModel.softDelete(shipmentId)
+
+      return {
+        id: shipmentId,
+        ref_number: shipment.ref_number,
+        previous_status: shipment.status,
+        reversed_transactions:
+          shipment.status === SHIPMENT_STATUS.POSTED ||
+          shipment.status === SHIPMENT_STATUS.DELIVERED,
+      }
+    })
+  }
+
   getPendingByBroker(brokerId, { limit = 50, offset = 0 } = {}) {
     return ShipmentModel.findByBroker(brokerId, {
       limit,
@@ -319,13 +322,62 @@ class ShipmentService {
     })
   }
 
-  getReadyToPost({ limit = 50, offset = 0 } = {}) {
-    return ShipmentModel.findReadyToPost({ limit, offset })
+  _filterPostable(rows) {
+    return rows.filter((row) => classifyPostability(row).is_postable)
+  }
+
+  countReadyToPost() {
+    const { rows } = ShipmentModel.listWithDetails({
+      filters: { status_in: [SHIPMENT_STATUS.PENDING, SHIPMENT_STATUS.COMPLETE] },
+      limit: 10_000,
+      offset: 0,
+    })
+    const postable = this._filterPostable(rows)
+    const total_value = round2(
+      postable.reduce((sum, row) => sum + (Number(row.total_cost) || 0), 0)
+    )
+    return { count: postable.length, total_value }
+  }
+
+  getReadyToPost({ limit = 50, offset = 0, search, from, to } = {}) {
+    const { rows } = ShipmentModel.listWithDetails({
+      filters: {
+        status_in: [SHIPMENT_STATUS.PENDING, SHIPMENT_STATUS.COMPLETE],
+        search,
+        from,
+        to,
+      },
+      limit: 10_000,
+      offset: 0,
+    })
+    const postable = this._filterPostable(rows).map((row) => {
+      const { missing, is_postable } = classifyPostability(row)
+      return {
+        ...row,
+        progress: { missing, is_complete: is_postable },
+      }
+    })
+    return {
+      rows: postable.slice(offset, offset + limit),
+      total: postable.length,
+      limit,
+      offset,
+    }
   }
 
   list(filters = {}) {
     const { limit = 50, offset = 0, ...rest } = filters
-    return ShipmentModel.listWithDetails({ filters: rest, limit, offset })
+    const result = ShipmentModel.listWithDetails({ filters: rest, limit, offset })
+    return {
+      ...result,
+      rows: result.rows.map((row) => {
+        const { missing, is_postable } = classifyPostability(row)
+        return {
+          ...row,
+          progress: { missing, is_complete: is_postable },
+        }
+      }),
+    }
   }
 
   getById(id) {

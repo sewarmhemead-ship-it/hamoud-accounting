@@ -1,4 +1,5 @@
 const ShipmentModel = require('../models/ShipmentModel')
+const ShipmentService = require('./ShipmentService')
 const CenterModel = require('../models/CenterModel')
 const InventoryModel = require('../models/InventoryModel')
 const AdminModel = require('../models/AdminModel')
@@ -51,20 +52,22 @@ function buildAlerts(user) {
 
   /* ─── شحنات ─── */
   if (userHasPerm(user, PERM.SHIPMENTS_VIEW)) {
-    const pending = ShipmentModel.sumGlobalByStatus('pending').count
-    const ready = ShipmentModel.sumGlobalByStatus('complete').count
+    const pendingDb = ShipmentModel.sumGlobalByStatus('pending')
+    const legacyComplete = ShipmentModel.sumGlobalByStatus('complete')
+    const pending = pendingDb.count + legacyComplete.count
+    const ready = ShipmentService.countReadyToPost().count
     const posted = ShipmentModel.sumGlobalByStatus('posted').count
     const overdue = ShipmentModel.countOverdueWip(wipDays)
 
-    if (pending > 0) {
+    if (pending > ready) {
       alerts.push(
         makeAlert({
           type: 'pending_wip',
           category: 'shipments',
           severity: 'warning',
           title: 'سيارات معلقة',
-          message: `${pending} سيارة بأقلام ناقصة (WIP)`,
-          count: pending,
+          message: `${pending - ready} سيارة بأقلام ناقصة (WIP)`,
+          count: pending - ready,
           link: '/shipments/wip',
         })
       )
@@ -77,7 +80,7 @@ function buildAlerts(user) {
           category: 'shipments',
           severity: 'info',
           title: 'جاهزة للترحيل',
-          message: `${ready} سيارة مكتملة بانتظار الترحيل`,
+          message: `${ready} سيارة جاهزة للترحيل`,
           count: ready,
           link: '/shipments/ready',
         })

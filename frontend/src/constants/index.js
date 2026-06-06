@@ -38,18 +38,18 @@ export const CENTER_TYPES = {
   internal: { label: 'داخلي', color: 'bg-white/10 text-ink-soft' },
 }
 
-/** فلاتر حالة السيارة — مشتركة بين لوحة التحكم وصفحة السيارات */
+/** فلاتر حالة السيارة — 3 مراحل ظاهرة: معلقة / مرحّلة / مُسلّمة */
 export const SHIPMENT_STATUS_FILTERS = [
   { value: '', label: 'الكل' },
   { value: 'pending', label: 'معلقة' },
-  { value: 'complete', label: 'مكتملة' },
   { value: 'posted', label: 'مرحّلة' },
   { value: 'delivered', label: 'مُسلّمة' },
 ]
 
 export const SHIPMENT_STATUS = {
   pending:   { label: 'معلقة',    color: 'bg-warning/15 text-warning', icon: '◌' },
-  complete:  { label: 'مكتملة',  color: 'bg-accent/15 text-accent',   icon: '◎' },
+  postable:  { label: 'قابلة للترحيل', color: 'bg-accent/15 text-accent', icon: '◎' },
+  complete:  { label: 'معلقة',  color: 'bg-warning/15 text-warning', icon: '◌' },
   posted:    { label: 'مرحّلة',  color: 'bg-success/15 text-success', icon: '●' },
   delivered: { label: 'مُسلَّمة', color: 'bg-[#6366f115] text-[#818cf8]', icon: '✓' },
 }

@@ -173,11 +173,22 @@ describe('resolveTotalCost — مصدر الحقيقة لمجموع السيار
     expect(r.clearanceAmount).toBe(0)
   })
 
-  it('price فقط بدون cost → isDual true، clearanceAmount = 0', () => {
+  it('price_tarseem فقط → isDual true، clearanceAmount = legacy إن وُجد', () => {
     const r = resolveTotalCost({ price_tarseem: 500 })
     expect(r.isDual).toBe(true)
     expect(r.traderAmount).toBe(500)
     expect(r.clearanceAmount).toBe(0)
+  })
+
+  it('price_other فقط على سيارة كلاسيكية → يبقى كلاسيكي', () => {
+    const r = resolveTotalCost({
+      tarseem: 2646,
+      syrian_driver: 400,
+      clearance_fee: 30,
+      price_other: 5,
+    })
+    expect(r.isDual).toBe(false)
+    expect(r.traderAmount).toBe(3076)
   })
 
   it('مربح الشركة = traderAmount − clearanceAmount', () => {

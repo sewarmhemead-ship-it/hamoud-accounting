@@ -32,7 +32,7 @@ class TransactionModel extends BaseModel {
 
   findByCenter(
     centerId,
-    { from, to, type, is_delivered, limit = 50, offset = 0 } = {}
+    { from, to, type, category, exclude_category, is_delivered, limit = 50, offset = 0 } = {}
   ) {
     const conditions = ['t.center_id = ?', 't.is_deleted = 0']
     const params = [centerId]
@@ -48,6 +48,14 @@ class TransactionModel extends BaseModel {
     if (type) {
       conditions.push('t.type = ?')
       params.push(type)
+    }
+    if (category) {
+      conditions.push('t.category = ?')
+      params.push(category)
+    }
+    if (exclude_category) {
+      conditions.push('(t.category IS NULL OR t.category != ?)')
+      params.push(exclude_category)
     }
     if (is_delivered !== undefined) {
       conditions.push('t.is_delivered = ?')
@@ -114,12 +122,14 @@ class TransactionModel extends BaseModel {
   }
 
   sumPaymentsByDate(date) {
+    // المقاصة ليست تحصيلاً نقدياً — تُستثنى من «دفعات اليوم» في المربح اليومي
     return this.db
       .prepare(
         `
       SELECT COALESCE(SUM(amount_usd), 0) AS total
       FROM transactions
       WHERE type = 'in'
+        AND category = 'payment'
         AND is_deleted = 0
         AND date(date) = date(?)
     `
@@ -176,6 +186,7 @@ class TransactionModel extends BaseModel {
       LEFT JOIN centers c ON c.id = t.center_id
       LEFT JOIN shipments s ON s.id = t.shipment_id
       WHERE t.type = 'in'
+        AND t.category = 'payment'
         AND t.is_deleted = 0
         AND date(t.date) = date(?)
       ORDER BY t.date DESC, t.id DESC

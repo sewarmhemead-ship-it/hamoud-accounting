@@ -13,7 +13,7 @@ const { buildAlerts } = require('../src/services/NotificationService')
 const { generateRef } = require('../src/utils/refGenerator')
 const { REF_PREFIX } = require('../src/config/constants')
 const { calculateGrandTotal } = require('../src/engine/balance')
-const { calculateShipmentTotal } = require('../src/engine')
+const { calculateShipmentTotal, classifyPostability } = require('../src/engine')
 
 let ctx
 
@@ -52,7 +52,8 @@ describe('مسار المنتج الكامل — E2E على الخدمات', () 
       },
       ctx.adminId
     )
-    expect(truck.status).toBe('complete')
+    expect(truck.status).toBe('pending')
+    expect(classifyPostability(truck).is_postable).toBe(true)
     const engineTotal = calculateShipmentTotal({
       tarseem: 2000,
       workers: 100,

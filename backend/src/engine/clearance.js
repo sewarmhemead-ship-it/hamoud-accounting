@@ -200,22 +200,23 @@ function calculateShipmentProfit(shipment) {
  * @returns {{ traderAmount:number, clearanceAmount:number, isDual:boolean }}
  */
 function resolveTotalCost(shipment) {
+  const { hasActiveDualLedger } = require('./dualLedger')
   const priceTotal = calculatePriceTotal(shipment)
-  const costTotal  = calculateCostTotal(shipment)
+  const costTotal = calculateCostTotal(shipment)
+  const legacy = calculateShipmentTotal(shipment)
 
-  if (priceTotal > 0 || costTotal > 0) {
+  if (hasActiveDualLedger(shipment)) {
     return {
-      traderAmount:    priceTotal,
-      clearanceAmount: costTotal,
-      isDual:          true,
+      traderAmount: priceTotal > 0 ? priceTotal : legacy,
+      clearanceAmount: costTotal > 0 ? costTotal : legacy,
+      isDual: true,
     }
   }
 
-  const legacy = calculateShipmentTotal(shipment)
   return {
-    traderAmount:    legacy,
+    traderAmount: legacy,
     clearanceAmount: legacy,
-    isDual:          false,
+    isDual: false,
   }
 }
 

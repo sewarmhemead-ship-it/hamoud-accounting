@@ -1,6 +1,9 @@
 const CenterModel = require('../models/CenterModel')
 const ShipmentModel = require('../models/ShipmentModel')
 const TransactionModel = require('../models/TransactionModel')
+const AccountingService = require('./AccountingService')
+const { calculateGrandTotal } = require('../engine/balance')
+const { TX_CATEGORY } = require('../config/constants')
 const {
   COST_FIELDS,
   PRICE_FIELDS,
@@ -9,6 +12,7 @@ const {
   calculateCostTotal,
   calculatePriceTotal,
   calculateShipmentProfit,
+  resolveTotalCost,
 } = require('../engine/clearance')
 const { round2 } = require('../engine/numbers')
 
@@ -53,8 +57,15 @@ class TraderReportService {
       .filter((s) => inRange(s.entry_date, from, to))
       .sort((a, b) => String(a.entry_date).localeCompare(String(b.entry_date)))
 
-    const { rows: payments } = TransactionModel.findByCenter(centerId, {
+    const { rows: paymentsIn } = TransactionModel.findByCenter(centerId, {
       type: 'in',
+      from,
+      to,
+      limit: 5000,
+    })
+    const { rows: offsetOut } = TransactionModel.findByCenter(centerId, {
+      type: 'out',
+      category: TX_CATEGORY.OFFSET,
       from,
       to,
       limit: 5000,
@@ -68,9 +79,10 @@ class TraderReportService {
     let totalProfit = 0
 
     const rows = shipments.map((s) => {
-      const priceTotal = calculatePriceTotal(s)
-      const costTotal = calculateCostTotal(s)
-      const profit = calculateShipmentProfit(s)
+      const resolved = resolveTotalCost(s)
+      const priceTotal = resolved.traderAmount
+      const costTotal = resolved.clearanceAmount
+      const profit = round2(priceTotal - costTotal)
       totalCharges = round2(totalCharges + priceTotal)
       totalCost = round2(totalCost + costTotal)
       totalProfit = round2(totalProfit + profit)
@@ -99,19 +111,43 @@ class TraderReportService {
     })
 
     const totalPayments = round2(
-      payments.reduce((a, p) => a + (Number(p.amount_usd ?? p.amount) || 0), 0)
+      paymentsIn.reduce((a, p) => a + (Number(p.amount_usd ?? p.amount) || 0), 0)
     )
-    const balance = round2(totalCharges - totalPayments)
+    const totalOffsetCharges = round2(
+      offsetOut.reduce((a, p) => a + (Number(p.amount_usd ?? p.amount) || 0), 0)
+    )
+    const chargesPosted = round2(
+      shipments
+        .filter((s) => s.status === 'posted' || s.status === 'delivered')
+        .reduce((a, s) => a + resolveTotalCost(s).traderAmount, 0) + totalOffsetCharges
+    )
+    const chargesWip = round2(
+      shipments
+        .filter((s) => s.status === 'pending' || s.status === 'complete')
+        .reduce((a, s) => a + resolveTotalCost(s).traderAmount, 0)
+    )
+    const acct = AccountingService.getCenterFullStatement(centerId)
+    const balance = calculateGrandTotal(acct.balance, acct.posted_undelivered_value)
     const marginPct = totalCost > 0 ? round2((totalProfit / totalCost) * 100) : 0
 
-    const paymentRows = payments
-      .map((p) => ({
+    const paymentRows = [
+      ...paymentsIn.map((p) => ({
         date: p.date,
         ref_number: p.ref_number,
         amount: round2(Number(p.amount_usd ?? p.amount) || 0),
         notes: p.notes,
-      }))
-      .sort((a, b) => String(a.date).localeCompare(String(b.date)))
+        kind: p.category === TX_CATEGORY.OFFSET ? 'offset_credit' : 'payment',
+        category: p.category,
+      })),
+      ...offsetOut.map((p) => ({
+        date: p.date,
+        ref_number: p.ref_number,
+        amount: round2(Number(p.amount_usd ?? p.amount) || 0),
+        notes: p.notes,
+        kind: 'offset_debit',
+        category: p.category,
+      })),
+    ].sort((a, b) => String(a.date).localeCompare(String(b.date)))
 
     return {
       company: SettingsService.getReportCompanyName(),
@@ -124,9 +160,15 @@ class TraderReportService {
       payments: paymentRows,
       totals: {
         charges: totalCharges,
+        charges_posted: chargesPosted,
+        charges_wip: chargesWip,
         cost: totalCost,
         payments: totalPayments,
+        offset_charges: totalOffsetCharges,
         balance,
+        accounting_balance: acct.balance,
+        accounting_posted_undelivered: acct.posted_undelivered_value,
+        accounting_wip: acct.wip_value,
         profit: totalProfit,
         margin_pct: marginPct,
         shipments_count: rows.length,

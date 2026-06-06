@@ -1,6 +1,7 @@
 const LookupModel    = require('../models/LookupModel')
 const CenterModel    = require('../models/CenterModel')
 const ShipmentModel  = require('../models/ShipmentModel')
+const ShipmentService = require('../services/ShipmentService')
 const DailyProfitModel = require('../models/DailyProfitModel')
 const WhatsappService  = require('../services/WhatsappService')
 const ProfitService    = require('../services/ProfitService')
@@ -53,22 +54,23 @@ const reportController = {
     const closed    = ProfitService.getByDate(today)
 
     // الشحنات
-    const [pending, complete, posted, delivered] = ['pending', 'complete', 'posted', 'delivered'].map(
+    const [pendingDb, legacyComplete, posted, delivered] = ['pending', 'complete', 'posted', 'delivered'].map(
       (s) => ShipmentModel.sumGlobalByStatus(s)
     )
+    const readyToPost = ShipmentService.countReadyToPost()
+    const wipCount = pendingDb.count + legacyComplete.count
+    const wipTotal = pendingDb.total + legacyComplete.total
+
+    // أحدث السيارات
+    const recent = ShipmentModel.listWithDetails({ limit: 5 }).rows
+
+    // جاهزة للترحيل — حسب اكتمال الأقلام لا حالة complete
+    const pendingPost = ShipmentService.getReadyToPost({ limit: 10 }).rows
 
     // المراكز
     const tradersTotal = CenterModel.findAll({ filters: { type: 'trader' }, limit: 1 }).total
     const brokersTotal = CenterModel.findAll({ filters: { type: 'broker' }, limit: 1 }).total
     const topBalances  = CenterModel.topTraderBalances(5)
-
-    // أحدث السيارات
-    const recent = ShipmentModel.listWithDetails({ limit: 5 }).rows
-
-    // السيارات المكتملة (جاهزة للترحيل) — للجدول السفلي
-    const pendingPost = ShipmentModel.listWithDetails({
-      filters: { status: 'complete' }, limit: 10,
-    }).rows
 
     // آخر 7 أيام (للمخطط)
     const trend = []
@@ -110,14 +112,26 @@ const reportController = {
         closed,
       },
       shipments: {
-        pending:   { count: pending.count,   total_value: pending.total },
-        complete:  { count: complete.count,  total_value: complete.total },
+        pending: {
+          count: wipCount,
+          total_value: wipTotal,
+        },
+        ready_to_post: {
+          count: readyToPost.count,
+          total_value: readyToPost.total_value,
+        },
+        // توافق خلفي — complete = جاهزة للترحيل (ديناميكي)
+        complete: {
+          count: readyToPost.count,
+          total_value: readyToPost.total_value,
+        },
         posted:    { count: posted.count,    total_value: posted.total },
         delivered: { count: delivered.count, total_value: delivered.total },
       },
       centers:      { traders: tradersTotal, brokers: brokersTotal },
       top_balances: topBalances,
       recent,
+      pending_post: pendingPost,
       profit_trend: trend,
       inventory,
     }))

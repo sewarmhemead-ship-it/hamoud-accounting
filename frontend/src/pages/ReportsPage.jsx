@@ -369,7 +369,7 @@ function PeriodPreview({ data }) {
       <div>
         <h4 className="text-sm font-bold text-ink mb-2">الشحنات حسب الحالة (تاريخ الدخول)</h4>
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 mb-3">
-          {['pending', 'complete', 'posted', 'delivered'].map((key) => (
+          {['pending', 'posted', 'delivered'].map((key) => (
             <div key={key} className="rounded-xl p-3 text-center" style={{ border: '1px solid var(--color-border)' }}>
               <p className="text-lg font-bold text-ink">{st[key]?.count || 0}</p>
               <p className="text-[10px] text-ink-soft">{SHIPMENT_STATUS[key]?.label}</p>

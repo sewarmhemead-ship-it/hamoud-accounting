@@ -3,7 +3,7 @@ const ShipmentModel = require('../models/ShipmentModel')
 const TransactionModel = require('../models/TransactionModel')
 const ShipmentService = require('./ShipmentService')
 const { buildBrokerStatement } = require('../engine/statement')
-const { SHIPMENT_REQUIRED_FIELDS } = require('../config/constants')
+const { SHIPMENT_REQUIRED_FIELDS, TX_CATEGORY } = require('../config/constants')
 
 class BrokerStatementService {
   /**
@@ -17,15 +17,21 @@ class BrokerStatementService {
     const center = CenterModel.findById(centerId)
 
     const { rows: shipments } = ShipmentModel.findByBroker(centerId, { limit: 1000 })
-    // الدفعات = حركات «وارد» فقط؛ قيود الترحيل (out) مأخوذة من مجاميع السيارات.
+    // الدفعات = حركات «وارد» (دفعات + مقاصة credit)؛ مقاصة debit = out منفصل
     const { rows: payments } = TransactionModel.findByCenter(centerId, {
       type: 'in',
+      limit: 1000,
+    })
+    const { rows: offsetCharges } = TransactionModel.findByCenter(centerId, {
+      type: 'out',
+      category: TX_CATEGORY.OFFSET,
       limit: 1000,
     })
 
     const statement = buildBrokerStatement({
       shipments,
       payments,
+      offsetCharges,
       centerType: center.type,
       requiredFields: SHIPMENT_REQUIRED_FIELDS.required,
     })

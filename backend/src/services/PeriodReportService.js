@@ -42,13 +42,18 @@ class PeriodReportService {
     const profitTotals = sumProfitDays(profitDays)
 
     const byStatus = ShipmentModel.summarizeByStatusInRange(from, to)
-    const statuses = ['pending', 'complete', 'posted', 'delivered']
+    const pendingMerged = {
+      count: (byStatus.pending?.count || 0) + (byStatus.complete?.count || 0),
+      total: round2((byStatus.pending?.total || 0) + (byStatus.complete?.total || 0)),
+    }
+    const statusSummary = {
+      pending: pendingMerged,
+      posted: byStatus.posted || { count: 0, total: 0 },
+      delivered: byStatus.delivered || { count: 0, total: 0 },
+    }
     let shipmentCount = 0
     let shipmentValue = 0
-    const statusSummary = {}
-    for (const st of statuses) {
-      const row = byStatus[st] || { count: 0, total: 0 }
-      statusSummary[st] = row
+    for (const row of Object.values(statusSummary)) {
       shipmentCount += row.count
       shipmentValue = round2(shipmentValue + row.total)
     }

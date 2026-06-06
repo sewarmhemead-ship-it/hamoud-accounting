@@ -1,11 +1,15 @@
 import { SHIPMENT_STATUS } from '../constants'
 
 const STEPS = [
-  { key: 'pending',   icon: '1', desc: 'أقلام ناقصة — لا تدخل اليوميات' },
-  { key: 'complete',  icon: '2', desc: 'جاهزة للترحيل — انتظار قرار' },
-  { key: 'posted',    icon: '3', desc: 'مرحّلة — قيد على التاجر' },
-  { key: 'delivered', icon: '4', desc: 'مُسلّمة — تدخل رصيد التاجر' },
+  { key: 'pending', icon: '1', desc: 'معلقة — تُكمَّل الأقلام ثم تُرحَّل مباشرة' },
+  { key: 'posted', icon: '2', desc: 'مرحّلة — قيد على التاجر والمخلص' },
+  { key: 'delivered', icon: '3', desc: 'مُسلّمة — تدخل رصيد التاجر' },
 ]
+
+function resolveStepIndex(currentStatus) {
+  if (currentStatus === 'complete') return 0
+  return STEPS.findIndex((s) => s.key === currentStatus)
+}
 
 export default function ShipmentLifecycle({
   currentStatus,
@@ -13,19 +17,24 @@ export default function ShipmentLifecycle({
   overview = false,
   counts = {},
 }) {
-  const currentIdx = STEPS.findIndex((s) => s.key === currentStatus)
+  const currentIdx = resolveStepIndex(currentStatus)
 
   if (overview) {
-    const max = Math.max(1, ...STEPS.map((s) => counts[s.key] || 0))
+    const overviewCounts = {
+      pending: (counts.pending || 0) + (counts.complete || 0),
+      posted: counts.posted || 0,
+      delivered: counts.delivered || 0,
+    }
+    const max = Math.max(1, ...STEPS.map((s) => overviewCounts[s.key] || 0))
     return (
       <div className="relative pt-2 pb-1">
         <div
           className="absolute top-[22px] right-[12%] left-[12%] h-px"
           style={{ background: 'var(--color-border)' }}
         />
-        <div className="relative grid grid-cols-4 gap-2">
+        <div className="relative grid grid-cols-3 gap-2">
           {STEPS.map((step, i) => {
-            const n = counts[step.key] || 0
+            const n = overviewCounts[step.key] || 0
             const intensity = n / max
             const active = n > 0 && intensity >= 0.5
             return (
@@ -135,20 +144,20 @@ export default function ShipmentLifecycle({
     <div className="glass-panel rounded-2xl p-5">
       <div className="relative">
         <div
-          className="absolute top-5 right-[calc(12.5%+10px)] left-[calc(12.5%+10px)] h-px"
+          className="absolute top-5 right-[calc(16.67%+10px)] left-[calc(16.67%+10px)] h-px"
           style={{ background: 'var(--color-border)' }}
         />
         <div
-          className="absolute top-5 right-[calc(12.5%+10px)] h-px transition-all duration-500"
+          className="absolute top-5 right-[calc(16.67%+10px)] h-px transition-all duration-500"
           style={{
             background: 'linear-gradient(90deg, #22c55e, #60A5FA)',
             width: `${currentIdx > 0 ? (currentIdx / (STEPS.length - 1)) * 100 : 0}%`,
-            maxWidth: 'calc(75% - 20px)',
+            maxWidth: 'calc(66.67% - 20px)',
             boxShadow: '0 0 8px var(--color-accent-glow)',
           }}
         />
 
-        <div className="relative grid grid-cols-4 gap-2">
+        <div className="relative grid grid-cols-3 gap-2">
           {STEPS.map((step, i) => {
             const done = i < currentIdx
             const active = i === currentIdx

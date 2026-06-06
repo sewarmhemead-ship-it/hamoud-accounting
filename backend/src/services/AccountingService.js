@@ -1,12 +1,23 @@
 const TransactionModel = require('../models/TransactionModel')
 const ShipmentModel = require('../models/ShipmentModel')
-const { CURRENCY } = require('../config/constants')
+const CenterModel = require('../models/CenterModel')
+const { CURRENCY, CENTER_TYPE, TX_CATEGORY } = require('../config/constants')
 const { convertToUsd } = require('../engine/currency')
 const { nowISO } = require('../utils/dates')
+const { round2 } = require('../engine/numbers')
 const {
   calculateCenterBalance,
   calculateGrandTotal,
 } = require('../engine/balance')
+
+function buildOffsetNotes(fromCenter, toCenter, amount, userNotes) {
+  const amt = round2(amount)
+  const base = `مقاصة: خصمنا ${amt}$ من «${fromCenter.name}» وأضفنا ${amt}$ على «${toCenter.name}»`
+  if (userNotes?.trim()) {
+    return `${base} — ${userNotes.trim()}`
+  }
+  return base
+}
 
 class AccountingService {
   getCenterBalance(centerId, currency = CURRENCY.USD) {
@@ -21,9 +32,16 @@ class AccountingService {
   }
 
   getCenterFullStatement(centerId) {
+    const center = CenterModel.findById(centerId)
+    const isBroker = center?.type === CENTER_TYPE.BROKER
     const balance = this.getCenterBalance(centerId)
-    const postedUndelivered = ShipmentModel.sumByCenterAndStatus(centerId, 'posted')
-    const wip = ShipmentModel.sumByCenterAndStatuses(centerId, ['pending', 'complete'])
+
+    const postedUndelivered = isBroker
+      ? ShipmentModel.sumByClearanceCenterAndStatus(centerId, 'posted')
+      : ShipmentModel.sumTraderByCenterAndStatus(centerId, 'posted')
+    const wip = isBroker
+      ? ShipmentModel.sumByClearanceCenterAndStatuses(centerId, ['pending', 'complete'])
+      : ShipmentModel.sumTraderByCenterAndStatuses(centerId, ['pending', 'complete'])
 
     return {
       ...balance,
@@ -79,33 +97,41 @@ class AccountingService {
   }
 
   offsetCenters(fromCenterId, toCenterId, amount, userId, notes, refOut, refIn) {
+    const fromCenter = CenterModel.findById(fromCenterId)
+    const toCenter = CenterModel.findById(toCenterId)
+    const offsetNotes = buildOffsetNotes(fromCenter, toCenter, amount, notes)
+    const pairRef = refOut || refIn
+
     const baseData = {
       currency: CURRENCY.USD,
       amount,
       amount_usd: amount,
       exchange_rate: 1,
-      category: 'offset',
-      notes: notes || 'مقاصة',
+      category: TX_CATEGORY.OFFSET,
+      is_delivered: 1,
+      notes: offsetNotes,
     }
 
     return TransactionModel.transaction(() => {
-      const outTx = TransactionModel.create({
+      const creditTx = TransactionModel.create({
         ...baseData,
         ref_number: refOut,
         date:       nowISO(),
         type:       'in',
         center_id:  fromCenterId,
+        notes:      `${offsetNotes} [${pairRef}]`,
         created_by: userId,
       })
-      const inTx = TransactionModel.create({
+      const debitTx = TransactionModel.create({
         ...baseData,
         ref_number: refIn,
         date:       nowISO(),
         type:       'out',
         center_id:  toCenterId,
+        notes:      `${offsetNotes} [${pairRef}]`,
         created_by: userId,
       })
-      return { out: outTx, in: inTx }
+      return { out: creditTx, in: debitTx, credit: creditTx, debit: debitTx, notes: offsetNotes }
     })
   }
 }

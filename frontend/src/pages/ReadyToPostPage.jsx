@@ -29,9 +29,8 @@ export default function ReadyToPostPage() {
   const { data, isLoading, isFetching, refetch } = useQuery({
     queryKey: ['shipments', 'ready-filtered', debouncedSearch, from, to],
     queryFn: () =>
-      shipmentsApi.list(
+      shipmentsApi.ready(
         buildShipmentsListParams({
-          status: 'complete',
           search: debouncedSearch,
           from,
           to,
@@ -101,7 +100,7 @@ export default function ReadyToPostPage() {
         onToChange={setTo}
         onClear={clearFilters}
         showStatus={false}
-        lockedStatus="complete"
+        lockedStatus="postable"
         busy={listBusy}
       />
 
@@ -228,7 +227,7 @@ export default function ReadyToPostPage() {
                       {formatCurrency(s.total_cost || 0)}
                     </td>
                     <td className="py-2.5 px-3">
-                      <StatusBadge status={s.status} />
+                      <StatusBadge status={s.status} postable />
                     </td>
                   </tr>
                 )
