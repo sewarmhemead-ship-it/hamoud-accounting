@@ -44,6 +44,7 @@ function rangeLabel(range) {
 }
 
 function shell(data, title, body) {
+  const centerSuffix = data.center?.name ? ` — ${esc(data.center.name)}` : ''
   return `<!doctype html><html lang="ar" dir="rtl"><head><meta charset="utf-8">
 <style>
   @import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Arabic:wght@400;500;600;700&display=swap');
@@ -79,7 +80,7 @@ function shell(data, title, body) {
     <div class="logo">🏛</div>
     <div class="head-txt">
       <div class="company">${esc(data.company)}</div>
-      <div class="title">${esc(title)} — ${esc(data.center.name)}</div>
+      <div class="title">${esc(title)}${centerSuffix}</div>
       <div class="meta">${rangeLabel(data.range)} &nbsp;|&nbsp; تاريخ الإصدار: ${fmtDate(data.generated_at)}</div>
     </div>
   </div>

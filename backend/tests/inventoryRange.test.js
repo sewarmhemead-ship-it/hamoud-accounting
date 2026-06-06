@@ -1,5 +1,6 @@
 const { inventoryRangeSchema } = require('../src/validators/inventory.validator')
 const { deltaFirstLast, buildRangeReportPayload } = require('../src/utils/inventoryReport')
+const { inventoryRangeHtml } = require('../src/services/reports/pdfReport')
 
 describe('inventoryRange — فترة من–إلى', () => {
   it('يقبل فترة صحيحة', () => {
@@ -31,6 +32,30 @@ describe('inventoryRange — فترة من–إلى', () => {
     })
     expect(p.days_count).toBe(1)
     expect(p.range.from).toBe('2026-01-01')
+  })
+
+  it('inventoryRangeHtml بدون center لا يرمي خطأ', () => {
+    const html = inventoryRangeHtml({
+      company: 'شركة الحمود',
+      from: '2026-05-31',
+      to: '2026-06-05',
+      generated_at: '2026-06-05T12:00:00.000Z',
+      days_count: 1,
+      days: [
+        {
+          date: '2026-06-01',
+          label: 'جرد يومي',
+          centers_count: 18,
+          balance: 1000,
+          posted_undelivered: 500,
+          wip_value: 200,
+          total: 1500,
+        },
+      ],
+    })
+    expect(html).toContain('تقرير جرد الفترة')
+    expect(html).toContain('2026-05-31')
+    expect(html).not.toContain('undefined')
   })
 })
 
