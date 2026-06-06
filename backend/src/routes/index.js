@@ -32,9 +32,15 @@ router.use('/presence', presenceRoutes)
 router.use('/assistant', assistantRoutes)
 
 router.get('/health', (req, res) => {
+  const commit =
+    process.env.RAILWAY_GIT_COMMIT_SHA ||
+    process.env.RAILWAY_GIT_COMMIT ||
+    process.env.GIT_COMMIT ||
+    null
   res.json({
     success: true,
     message: 'hamoud-accounting API',
+    version: commit ? String(commit).slice(0, 7) : 'local',
     modules: ['assistant', 'chat', 'profile', 'backup', 'profit', 'shipments'],
   })
 })
