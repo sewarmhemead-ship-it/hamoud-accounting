@@ -202,10 +202,32 @@ class ProfitService {
     return DailyProfitModel.findByDate(date)
   }
 
+  /**
+   * يزامن يوماً مُغلقاً مع السيارات المُرحَّلة لاحقاً: عدد السيارات ومربحها (والصافي)
+   * مشتقّان من القيود الحيّة، أما المصاريف والفروقات فتبقى كما حُفظت عند الإغلاق.
+   */
+  _syncClosedCars(closed, preview) {
+    if (!closed) return closed
+    const DIFF_KEYS = ['clearance_diff', 'transport_diff', 'workers_diff', 'driver_diff', 'credit_diff']
+    const diffSum = DIFF_KEYS.reduce((s, k) => s + (Number(closed[k]) || 0), 0)
+    const liveTrucks = preview.num_trucks || 0
+    const liveGross = Math.round(((preview.gross_profit || 0) + diffSum) * 100) / 100
+    if ((Number(closed.num_trucks) || 0) === liveTrucks && (Number(closed.gross_profit) || 0) === liveGross) {
+      return closed
+    }
+    const liveNet = calculateNetProfit(liveGross, closed.office_expenses, closed.home_expenses)
+    DailyProfitModel.update(closed.id, {
+      num_trucks: liveTrucks,
+      gross_profit: liveGross,
+      net_profit: liveNet,
+    })
+    return DailyProfitModel.findByDate(closed.date)
+  }
+
   /** تفاصيل اليوم للواجهة والتقارير — لا يغيّر المحرك */
   getDayDetail(date) {
     const preview = this.calculateDay(date)
-    const closed = this.getByDate(date)
+    const closed = this._syncClosedCars(this.getByDate(date), preview)
     const movements = TransactionModel.listPostedClearancesByDate(date)
     const payments = TransactionModel.listPaymentsByDate(date)
     const movements_total = movements.reduce(
