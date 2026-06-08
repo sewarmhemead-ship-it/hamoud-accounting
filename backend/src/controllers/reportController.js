@@ -27,9 +27,11 @@ function sendDownload(res, buffer, filename, contentType) {
 const reportController = {
   lookups: asyncHandler(async (req, res) => {
     res.json(apiResponse.success({
-      currencies:  LookupModel.getCurrencies(),
-      borders:     LookupModel.getBorders(),
-      goods_types: LookupModel.getGoodsTypes(),
+      currencies:   LookupModel.getCurrencies(),
+      borders:      LookupModel.getBorders(),
+      goods_types:  LookupModel.getGoodsTypes(),
+      sources:      LookupModel.getSources(),
+      destinations: LookupModel.getDestinations(),
     }))
   }),
 

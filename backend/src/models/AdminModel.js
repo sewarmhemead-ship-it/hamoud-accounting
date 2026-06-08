@@ -64,6 +64,38 @@ class AdminModel {
     return this.db.prepare('SELECT * FROM goods_types WHERE id = ?').get(id)
   }
 
+  /* ── المصادر والوجهات (lookups عامة) ── */
+  _lookupList(table) {
+    return this.db.prepare(`SELECT * FROM ${table} ORDER BY is_active DESC, name ASC`).all()
+  }
+
+  _lookupCreate(table, { name, name_en = null }) {
+    const r = this.db.prepare(
+      `INSERT INTO ${table} (name, name_en) VALUES (?, ?)`
+    ).run(name, name_en)
+    return this.db.prepare(`SELECT * FROM ${table} WHERE id = ?`).get(r.lastInsertRowid)
+  }
+
+  _lookupUpdate(table, id, { name, name_en, is_active }) {
+    const sets = []
+    const vals = []
+    if (name      !== undefined) { sets.push('name = ?');      vals.push(name) }
+    if (name_en   !== undefined) { sets.push('name_en = ?');   vals.push(name_en) }
+    if (is_active !== undefined) { sets.push('is_active = ?'); vals.push(is_active ? 1 : 0) }
+    if (!sets.length) return this.db.prepare(`SELECT * FROM ${table} WHERE id = ?`).get(id)
+    vals.push(id)
+    this.db.prepare(`UPDATE ${table} SET ${sets.join(', ')} WHERE id = ?`).run(...vals)
+    return this.db.prepare(`SELECT * FROM ${table} WHERE id = ?`).get(id)
+  }
+
+  getSources()           { return this._lookupList('sources') }
+  createSource(data)     { return this._lookupCreate('sources', data) }
+  updateSource(id, data) { return this._lookupUpdate('sources', id, data) }
+
+  getDestinations()           { return this._lookupList('destinations') }
+  createDestination(data)     { return this._lookupCreate('destinations', data) }
+  updateDestination(id, data) { return this._lookupUpdate('destinations', id, data) }
+
   /* ── سجل النشاط ── */
   getAuditLog({ user_id, action, entity, from, to, limit = 50, offset = 0 } = {}) {
     const conds = []

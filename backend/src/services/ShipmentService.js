@@ -124,6 +124,7 @@ class ShipmentService {
       destination: data.destination,
       driver_name: data.driver_name || null,
       entry_date: data.entry_date,
+      company_profit: data.company_profit ?? null,
       ...financial,
       ...dual,
       total_cost,
@@ -155,7 +156,8 @@ class ShipmentService {
         if (
           !FINANCIAL_FIELDS.includes(field) &&
           !DUAL_FIELDS.includes(field) &&
-          field !== 'notes'
+          field !== 'notes' &&
+          field !== 'company_profit'
         )
           continue
         const oldValue = shipment[field]

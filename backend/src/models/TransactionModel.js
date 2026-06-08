@@ -107,7 +107,10 @@ class TransactionModel extends BaseModel {
     return this.db
       .prepare(
         `
-      SELECT COALESCE(SUM(t.amount_usd), 0) AS total, COUNT(*) AS count
+      SELECT
+        COALESCE(SUM(t.amount_usd), 0) AS total,
+        COALESCE(SUM(s.company_profit), 0) AS profit_total,
+        COUNT(*) AS count
       FROM transactions t
       INNER JOIN shipments s ON s.id = t.shipment_id
       INNER JOIN centers c ON c.id = t.center_id
@@ -151,7 +154,8 @@ class TransactionModel extends BaseModel {
         c.id AS trader_id,
         c.name AS trader_name,
         t.id AS transaction_id,
-        t.amount_usd AS clearance_amount
+        t.amount_usd AS clearance_amount,
+        s.company_profit AS company_profit
       FROM transactions t
       INNER JOIN shipments s ON s.id = t.shipment_id
       INNER JOIN centers c ON c.id = t.center_id

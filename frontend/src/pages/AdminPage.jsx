@@ -617,6 +617,8 @@ export default function AdminPage() {
     { id: 'users',   icon: '👥', label: 'المستخدمون',      count: stats.users },
     { id: 'borders', icon: '🛂', label: 'المعابر',          count: stats.borders },
     { id: 'goods',   icon: '📦', label: 'أنواع البضائع',   count: stats.goods_types },
+    { id: 'sources', icon: '📍', label: 'المصادر' },
+    { id: 'destinations', icon: '🏁', label: 'الوجهات' },
     { id: 'audit',   icon: '📋', label: 'سجل النشاط',      count: stats.recent_activity !== undefined ? `${stats.recent_activity} (7 أيام)` : undefined },
   ]
 
@@ -678,6 +680,28 @@ export default function AdminPage() {
             updateFn={(id, d) => adminApi.updateGoodsType(id, d)}
             noun="نوع بضاعة"
             namePlaceholder="خضار، فواكه، مواد غذائية..."
+          />
+        )}
+
+        {tab === 'sources' && (
+          <LookupTab
+            queryKey="admin-sources"
+            fetchFn={() => adminApi.listSources()}
+            createFn={(d) => adminApi.createSource(d)}
+            updateFn={(id, d) => adminApi.updateSource(id, d)}
+            noun="مصدر"
+            namePlaceholder="مرسين، غازي عنتاب..."
+          />
+        )}
+
+        {tab === 'destinations' && (
+          <LookupTab
+            queryKey="admin-destinations"
+            fetchFn={() => adminApi.listDestinations()}
+            createFn={(d) => adminApi.createDestination(d)}
+            updateFn={(id, d) => adminApi.updateDestination(id, d)}
+            noun="وجهة"
+            namePlaceholder="حلب، إدلب، دمشق..."
           />
         )}
 

@@ -23,6 +23,14 @@ router.get('/goods-types',      adminController.listGoodsTypes)
 router.post('/goods-types',     adminController.createGoodsType)
 router.put('/goods-types/:id',  adminController.updateGoodsType)
 
+router.get('/sources',       adminController.listSources)
+router.post('/sources',      adminController.createSource)
+router.put('/sources/:id',   adminController.updateSource)
+
+router.get('/destinations',      adminController.listDestinations)
+router.post('/destinations',     adminController.createDestination)
+router.put('/destinations/:id',  adminController.updateDestination)
+
 router.get('/audit-log', adminController.auditLog)
 
 router.get('/backup/status', backupController.status)

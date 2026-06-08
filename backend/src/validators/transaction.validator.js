@@ -13,11 +13,22 @@ const createPaymentSchema = z.object({
   notes: z.string().optional(),
 })
 
+const createExpenseSchema = z.object({
+  center_id: z.number().int().positive('المركز مطلوب'),
+  date: z.string().min(1, 'التاريخ مطلوب'),
+  amount: z.number().positive('المبلغ مطلوب'),
+  currency: z.enum(['USD', 'SYP', 'TRY']).default('USD'),
+  exchange_rate: z.number().positive().default(1),
+  label: z.string().min(1, 'بند المصروف مطلوب'),
+  notes: z.string().optional(),
+})
+
 const offsetSchema = z
   .object({
     from_center_id: z.number().int().positive(),
     to_center_id: z.number().int().positive(),
     amount: z.number().positive(),
+    date: z.string().min(1, 'التاريخ مطلوب').optional(),
     notes: z.string().optional(),
   })
   .refine((d) => d.from_center_id !== d.to_center_id, {
@@ -40,4 +51,4 @@ const updateTransactionSchema = z
     message: 'لا يوجد ما يُحدّث',
   })
 
-module.exports = { createPaymentSchema, offsetSchema, updateTransactionSchema }
+module.exports = { createPaymentSchema, createExpenseSchema, offsetSchema, updateTransactionSchema }

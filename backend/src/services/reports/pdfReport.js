@@ -97,15 +97,15 @@ function shell(data, title, body) {
 function traderHtml(data) {
   const pc = data.price_columns
   const head =
-    `<tr><th>التاريخ</th><th>رقم</th><th>البضاعة</th><th>المصدر</th><th>الوجهة</th><th>الوزن</th>` +
+    `<tr><th>التاريخ</th><th>السائق</th><th>البضاعة</th><th>المعبر</th><th>الوجهة</th><th>الوزن</th>` +
     pc.map((c) => `<th>${esc(c.label)}</th>`).join('') +
     `<th>المجموع</th></tr>`
 
   const rows = data.rows
     .map(
       (r) =>
-        `<tr><td>${fmtDate(r.entry_date)}</td><td>${esc(r.ref_number)}</td><td>${esc(r.goods_name)}</td>` +
-        `<td>${esc(r.source)}</td><td>${esc(r.destination)}</td><td class="num">${esc(r.weight ?? '')}</td>` +
+        `<tr><td>${fmtDate(r.entry_date)}</td><td>${esc(r.driver)}</td><td>${esc(r.goods_type)}</td>` +
+        `<td>${esc(r.border)}</td><td>${esc(r.destination)}</td><td class="num">${esc(r.weight ?? '')}</td>` +
         pc.map((c) => `<td class="num">${money(r.price[c.key] || 0)}</td>`).join('') +
         `<td class="num">${money(r.total)}</td></tr>`
     )
@@ -262,12 +262,13 @@ function dailyProfitHtml(data) {
   <p class="section">الميزانية — ${esc(data.date)} ${data.is_closed ? '(مُغلق)' : '(معاينة)'}</p>
   <table>
     <tr><th>البند</th><th>المبلغ</th></tr>
-    <tr><td>تخليص الشركة (أساس)</td><td class="num">${money(w.base_clearance)}</td></tr>
+    <tr><td>سيارات مرحّلة اليوم</td><td class="num">${w.num_trucks || 0}</td></tr>
+    <tr><td>مربح السيارات</td><td class="num">${money(w.base_clearance)}</td></tr>
     ${diffRows}
     <tr class="tot"><td>إجمالي اليوم</td><td class="num">${money(w.gross_profit)}</td></tr>
-    <tr><td>مصاريف مكتب</td><td class="num">${money(w.office_expenses)}</td></tr>
-    <tr><td>مصاريف منزل</td><td class="num">${money(w.home_expenses)}</td></tr>
-    <tr class="tot"><td>صافي اليوم</td><td class="num">${money(w.net_profit)}</td></tr>
+    <tr><td>مصاريف المكتب</td><td class="num">${money(w.office_expenses)}</td></tr>
+    <tr><td>مصاريف المنزل</td><td class="num">${money(w.home_expenses)}</td></tr>
+    <tr class="tot"><td>صافي المربح</td><td class="num">${money(w.net_profit)}</td></tr>
   </table>
   ${expenseBlock('تفصيل مكتب', data.expenses?.office)}
   ${expenseBlock('تفصيل تشغيلية', data.expenses?.operations)}

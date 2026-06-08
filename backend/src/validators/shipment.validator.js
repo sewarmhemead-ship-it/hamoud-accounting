@@ -41,6 +41,9 @@ const createShipmentSchema = z.object({
   price_door_receipt: z.number().min(0).optional(),
   price_other: z.number().min(0).optional(),
 
+  // مربح الشركة لكل سيارة (ما نأخذه من التاجر) — أساس المربح اليومي
+  company_profit: z.number().min(0).optional(),
+
   notes: z.string().optional(),
 })
 
@@ -73,6 +76,9 @@ const updateFieldsSchema = z
     price_service_fee: z.number().min(0).optional(),
     price_door_receipt: z.number().min(0).optional(),
     price_other: z.number().min(0).optional(),
+
+    // مربح الشركة لكل سيارة (ما نأخذه من التاجر) — أساس المربح اليومي
+    company_profit: z.number().min(0).optional(),
 
     notes: z.string().optional(),
     _note: z.string().optional(),

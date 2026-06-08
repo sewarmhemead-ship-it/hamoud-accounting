@@ -147,7 +147,9 @@ function truckRow(shipment, requiredFields) {
     id: shipment.id,
     ref_number: shipment.ref_number || null,
     date: shipment.entry_date || null,
+    goods_type: shipment.goods_type_name || null,
     goods_name: shipment.goods_name || null,
+    driver: shipment.driver_name || null,
     trader: shipment.center_name || null,
     border: shipment.border_name || null,
     source: shipment.source || null,
@@ -165,12 +167,15 @@ function truckRow(shipment, requiredFields) {
 
 function paymentRow(payment) {
   const isOffset = payment.category === 'offset'
+  const isExpense = payment.category === 'expense'
+  const kind = isOffset ? 'offset_payment' : isExpense ? 'expense' : 'payment'
+  const defaultLabel = isOffset ? 'مقاصة' : isExpense ? 'مصروف' : 'دفعة'
   return {
-    kind: isOffset ? 'offset_payment' : 'payment',
+    kind,
     id: payment.id,
     ref_number: payment.ref_number || null,
     date: payment.date || null,
-    label: payment.notes || (isOffset ? 'مقاصة' : 'دفعة'),
+    label: payment.notes || defaultLabel,
     amount: round2(toFiniteNumber(payment.amount_usd ?? payment.amount, 'مبلغ الدفعة')),
     tx_type: payment.type || null,
     category: payment.category || null,
@@ -238,6 +243,11 @@ function buildBrokerStatement({
       offsetChargeRows.reduce((a, r) => a + r.amount, 0)
   )
   const paymentsTotal = round2(paymentRows.reduce((a, r) => a + r.amount, 0))
+  // مجموع بنود المصاريف (قيود وارد بتصنيف expense) — تخفّض الرصيد كباقي الدفعات،
+  // وتُعرض منفصلة في الكشف «بطريقة منظّمة».
+  const expensesTotal = round2(
+    paymentRows.filter((r) => r.kind === 'expense').reduce((a, r) => a + r.amount, 0)
+  )
   const balance = round2(chargesPosted - paymentsTotal)
 
   const isBroker = centerType === CENTER_TYPE.BROKER
@@ -262,6 +272,7 @@ function buildBrokerStatement({
       we_owe: weOwe,
       truck_count: postedTrucks.length,
       payment_count: paymentRows.length,
+      expenses_total: expensesTotal,
     },
     wip: {
       postable: {
@@ -301,8 +312,11 @@ function dualTruckRow(shipment, requiredFields) {
     id: shipment.id,
     ref_number: shipment.ref_number || null,
     date: shipment.entry_date || null,
+    goods_type: shipment.goods_type_name || null,
     goods_name: shipment.goods_name || null,
+    driver: shipment.driver_name || null,
     trader: shipment.center_name || null,
+    border: shipment.border_name || null,
     source: shipment.source || null,
     destination: shipment.destination || null,
     cost: COST_FIELDS.reduce((o, f) => ((o[f] = toFiniteNumber(shipment[f], COST_FIELD_LABELS[f])), o), {}),

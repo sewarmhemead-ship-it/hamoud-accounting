@@ -13,6 +13,8 @@ export default function CenterDetailPage() {
   const { id } = useParams()
   const [showPayment, setShowPayment] = useState(false)
   const [payment, setPayment] = useState({ amount: '', currency: 'USD', exchange_rate: '', date: todayISO(), notes: '' })
+  const [showExpense, setShowExpense] = useState(false)
+  const [expense, setExpense] = useState({ label: '', amount: '', currency: 'USD', exchange_rate: '', date: todayISO(), notes: '' })
   const [whatsappText, setWhatsappText] = useState(null)
   const [editPhone, setEditPhone] = useState(false)
   const [phoneVal, setPhoneVal] = useState('')
@@ -64,6 +66,32 @@ export default function CenterDetailPage() {
     onError: (err) => showToast(err.message, 'error'),
   })
 
+  const expenseMutation = useMutation({
+    mutationFn: (data) =>
+      transactionsApi.createExpense({ ...data, center_id: parseInt(id, 10) }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['balance', id] })
+      queryClient.invalidateQueries({ queryKey: ['statement', id] })
+      setShowExpense(false)
+      setExpense({ label: '', amount: '', currency: 'USD', exchange_rate: '', date: todayISO(), notes: '' })
+      showToast('تم تسجيل بند المصروف', 'success')
+    },
+    onError: (err) => showToast(err.message, 'error'),
+  })
+
+  const submitExpense = (e) => {
+    e.preventDefault()
+    const data = {
+      label: expense.label,
+      amount: parseFloat(expense.amount),
+      currency: expense.currency,
+      date: expense.date,
+    }
+    if (expense.currency !== 'USD') data.exchange_rate = parseFloat(expense.exchange_rate)
+    if (expense.notes?.trim()) data.notes = expense.notes.trim()
+    expenseMutation.mutate(data)
+  }
+
   const center = centerRes?.data
   const bal = balanceRes?.data
   const transactions = statementRes?.data?.transactions || []
@@ -86,8 +114,11 @@ export default function CenterDetailPage() {
         subtitle={`مركز ${center.code} — ${center.type}`}
         actions={
           <>
-            <button type="button" className="btn-primary" onClick={() => setShowPayment(!showPayment)}>
+            <button type="button" className="btn-primary" onClick={() => { setShowPayment(!showPayment); setShowExpense(false) }}>
               + دفعة
+            </button>
+            <button type="button" className="btn-secondary" onClick={() => { setShowExpense(!showExpense); setShowPayment(false) }}>
+              + بند مصروف
             </button>
             <button type="button" className="btn-secondary" onClick={loadWhatsapp}>
               واتساب
@@ -242,6 +273,69 @@ export default function CenterDetailPage() {
         </form>
       )}
 
+      {showExpense && (
+        <form className="card space-y-4" onSubmit={submitExpense}>
+          <h3 className="font-semibold text-ink">بند مصروف على الحساب</h3>
+          <p className="text-xs text-ink-soft">
+            بند يدفعه المركز (مثل إيجار المكتب) — يُخصم من رصيده ويظهر منظّماً في الكشف.
+          </p>
+          <div>
+            <label className="label">البند *</label>
+            <input
+              value={expense.label}
+              onChange={(e) => setExpense({ ...expense, label: e.target.value })}
+              placeholder="إيجار المكتب، كهرباء، رسوم..."
+              required
+            />
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="label">المبلغ *</label>
+              <input
+                type="number"
+                step="0.01"
+                min="0"
+                value={expense.amount}
+                onChange={(e) => setExpense({ ...expense, amount: e.target.value })}
+                required
+              />
+            </div>
+            <div>
+              <label className="label">العملة</label>
+              <select value={expense.currency} onChange={(e) => setExpense({ ...expense, currency: e.target.value })}>
+                <option value="USD">دولار $</option>
+                <option value="SYP">ليرة سورية</option>
+                <option value="TRY">ليرة تركية</option>
+              </select>
+            </div>
+          </div>
+          {expense.currency !== 'USD' && (
+            <div>
+              <label className="label">سعر الصرف مقابل الدولار *</label>
+              <input
+                type="number"
+                step="0.01"
+                value={expense.exchange_rate}
+                onChange={(e) => setExpense({ ...expense, exchange_rate: e.target.value })}
+                placeholder={expense.currency === 'SYP' ? 'مثال: 14500' : 'مثال: 32'}
+                required
+              />
+            </div>
+          )}
+          <div>
+            <label className="label">التاريخ</label>
+            <input type="date" value={expense.date} onChange={(e) => setExpense({ ...expense, date: e.target.value })} />
+          </div>
+          <div>
+            <label className="label">ملاحظة إضافية</label>
+            <input value={expense.notes} onChange={(e) => setExpense({ ...expense, notes: e.target.value })} />
+          </div>
+          <button type="submit" className="btn-primary" disabled={expenseMutation.isPending}>
+            تسجيل البند
+          </button>
+        </form>
+      )}
+
       {whatsappText && (
         <div className="card">
           <p className="text-sm text-ink-soft mb-2">انسخ الرسالة:</p>
@@ -276,7 +370,10 @@ export default function CenterDetailPage() {
               return (
                 <tr key={tx.id}>
                   <td className="py-2 px-1 text-ink-soft whitespace-nowrap">{formatDate(tx.date)}</td>
-                  <td className="py-2 px-1 text-ink max-w-[120px] truncate">
+                  <td className="py-2 px-1 text-ink max-w-[140px] truncate">
+                    {tx.category === 'expense' && (
+                      <span className="pill text-[10px] bg-info/15 text-info border border-info/25 ml-1">مصروف</span>
+                    )}
                     {tx.goods_name || tx.notes?.slice(0, 30) || tx.ref_number}
                   </td>
                   <td className="py-2 px-1 text-ink-soft">{isOut && tx.tarseem ? tx.tarseem : ''}</td>

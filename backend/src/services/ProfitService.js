@@ -1,6 +1,9 @@
 const TransactionModel = require('../models/TransactionModel')
 const DailyProfitModel = require('../models/DailyProfitModel')
+const AccountingService = require('./AccountingService')
 const { BusinessRuleError } = require('../utils/errors')
+const { generateRef } = require('../utils/refGenerator')
+const { REF_PREFIX } = require('../config/constants')
 const {
   calculateDailyGrossProfit,
   calculateNetProfit,
@@ -14,14 +17,66 @@ class ProfitService {
     const payments = TransactionModel.sumPaymentsByDate(date)
 
     const grossRevenue = clearance.total || 0
+    // أساس المربح اليومي = مجموع «مربحنا» (ما نأخذه من التاجر) للسيارات المُرحَّلة باليوم
+    const profitBasis = clearance.profit_total || 0
 
     return {
       date,
       num_trucks: clearance.count || 0,
       gross_revenue: grossRevenue,
       payments_received: payments.total || 0,
-      gross_profit: grossRevenue,
+      gross_profit: profitBasis,
     }
+  }
+
+  /**
+   * ينفّذ خصم بنود الميزانية المرتبطة بمركز (تاجر/مخلص) كقيود «مصروف» وارد تخفّض
+   * رصيد المركز. يضع علامة `expense_tx` على كل بند مُنفَّذ لمنع التكرار عند إعادة الحفظ.
+   *
+   * @param {string} notesStr ملاحظات الميزانية (JSON)
+   * @param {string} date تاريخ اليوم
+   * @param {number} userId
+   * @returns {{ notes:string, posted:object[] }}
+   */
+  _postBudgetCenterExpenses(notesStr, date, userId) {
+    if (!notesStr) return { notes: notesStr, posted: [] }
+    let parsed
+    try {
+      parsed = JSON.parse(notesStr)
+    } catch {
+      return { notes: notesStr, posted: [] }
+    }
+    const budget = parsed?.expense_budget
+    if (!budget || typeof budget !== 'object') return { notes: notesStr, posted: [] }
+
+    const posted = []
+    let changed = false
+    for (const key of Object.keys(budget)) {
+      const lines = budget[key]
+      if (!Array.isArray(lines)) continue
+      for (const line of lines) {
+        const centerId = Number(line.center_id)
+        const amount = Number(line.amount)
+        if (centerId && amount > 0 && !line.expense_tx) {
+          const ref = generateRef(REF_PREFIX.TRANSACTION)
+          AccountingService.createExpense(
+            {
+              ref_number: ref,
+              center_id: centerId,
+              amount,
+              currency: 'USD',
+              date,
+              notes: line.label || 'مصروف',
+            },
+            userId
+          )
+          line.expense_tx = ref
+          posted.push({ center_id: centerId, amount, label: line.label || 'مصروف', ref })
+          changed = true
+        }
+      }
+    }
+    return { notes: changed ? JSON.stringify(parsed) : notesStr, posted }
   }
 
   closeDay(date, {
@@ -42,7 +97,8 @@ class ProfitService {
     }
 
     const calc = this.calculateDay(date)
-    const baseClearance = calc.gross_revenue
+    // الأساس = مجموع «مربحنا» للسيارات المُرحَّلة (لا إجمالي فواتير التخليص)
+    const baseClearance = calc.gross_profit
     const gross_profit =
       manualGross ??
       calculateDailyGrossProfit({
@@ -55,20 +111,24 @@ class ProfitService {
       })
     const net_profit = calculateNetProfit(gross_profit, office_expenses, home_expenses)
 
-    return DailyProfitModel.create({
-      date,
-      num_trucks: num_trucks ?? calc.num_trucks,
-      clearance_diff,
-      transport_diff,
-      workers_diff,
-      driver_diff,
-      credit_diff,
-      gross_profit,
-      office_expenses,
-      home_expenses,
-      net_profit,
-      notes,
-      created_by: userId,
+    return DailyProfitModel.transaction(() => {
+      // خصم بنود الميزانية المرتبطة بمراكز (يضع علامات منع التكرار في الملاحظات)
+      const { notes: notesWithMarkers } = this._postBudgetCenterExpenses(notes, date, userId)
+      return DailyProfitModel.create({
+        date,
+        num_trucks: num_trucks ?? calc.num_trucks,
+        clearance_diff,
+        transport_diff,
+        workers_diff,
+        driver_diff,
+        credit_diff,
+        gross_profit,
+        office_expenses,
+        home_expenses,
+        net_profit,
+        notes: notesWithMarkers,
+        created_by: userId,
+      })
     })
   }
 
@@ -89,7 +149,7 @@ class ProfitService {
     if (diffTouched && data.gross_profit === undefined) {
       const calc = this.calculateDay(date)
       gross = calculateDailyGrossProfit({
-        baseClearance: calc.gross_revenue,
+        baseClearance: calc.gross_profit, // الأساس = مجموع «مربحنا»
         clearance_diff: data.clearance_diff ?? existing.clearance_diff,
         transport_diff: data.transport_diff ?? existing.transport_diff,
         workers_diff: data.workers_diff ?? existing.workers_diff,
@@ -101,13 +161,22 @@ class ProfitService {
     const office = data.office_expenses ?? existing.office_expenses
     const home = data.home_expenses ?? existing.home_expenses
 
-    return DailyProfitModel.update(existing.id, {
-      ...data,
-      gross_profit: gross,
-      office_expenses: office,
-      home_expenses: home,
-      net_profit: calculateNetProfit(gross, office, home),
-      updated_by: userId,
+    return DailyProfitModel.transaction(() => {
+      // خصم بنود الميزانية الجديدة المرتبطة بمراكز (إن وُجدت ملاحظات محدّثة)
+      const notesOut =
+        data.notes !== undefined
+          ? this._postBudgetCenterExpenses(data.notes, date, userId).notes
+          : data.notes
+
+      return DailyProfitModel.update(existing.id, {
+        ...data,
+        ...(data.notes !== undefined ? { notes: notesOut } : {}),
+        gross_profit: gross,
+        office_expenses: office,
+        home_expenses: home,
+        net_profit: calculateNetProfit(gross, office, home),
+        updated_by: userId,
+      })
     })
   }
 

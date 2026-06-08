@@ -1,10 +1,11 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useQuery, useMutation } from '@tanstack/react-query'
 import { centersApi, reportsApi, shipmentsApi, calculationsApi } from '../api'
 import { todayISO, formatCurrency, parseNum } from '../utils/format'
 import { DUAL_COST_FIELDS, DUAL_PRICE_FIELDS, DUAL_COST_TO_PRICE } from '../constants'
 import { useUiStore } from '../store/auth.store'
+import SearchableSelect from '../components/ui/SearchableSelect'
 
 const FINANCIAL_KEYS = [...DUAL_COST_FIELDS, ...DUAL_PRICE_FIELDS].map(([k]) => k)
 
@@ -20,6 +21,7 @@ const emptyForm = () => ({
   destination: '',
   entry_date: todayISO(),
   driver_name: '',
+  company_profit: '',
   notes: '',
   ...Object.fromEntries(FINANCIAL_KEYS.map((k) => [k, ''])),
 })
@@ -31,6 +33,7 @@ export default function NewShipmentPage() {
   const [form, setForm] = useState(emptyForm())
   const [margin, setMargin] = useState('')
   const [marginMode, setMarginMode] = useState('amount') // 'amount' | 'percent'
+  const [profitTouched, setProfitTouched] = useState(false) // عُدّل «مربحنا» يدوياً؟
   const navigate = useNavigate()
   const showToast = useUiStore((s) => s.showToast)
 
@@ -47,6 +50,8 @@ export default function NewShipmentPage() {
   const brokers = centersRes?.data?.filter((c) => c.type === 'broker') || []
   const borders = lookupsRes?.data?.borders || []
   const goodsTypes = lookupsRes?.data?.goods_types || []
+  const sources = lookupsRes?.data?.sources || []
+  const destinations = lookupsRes?.data?.destinations || []
 
   // رصيد التاجر/المخلص الحالي (سياق)
   const { data: traderBal } = useQuery({
@@ -100,6 +105,13 @@ export default function NewShipmentPage() {
       marginPct: Math.round(marginPct * 10) / 10,
     }
   }, [form])
+
+  // «مربحنا» يتعبّأ تلقائياً = مربح الشركة (فاتورة − تكلفة) ما لم يُعدَّل يدوياً
+  useEffect(() => {
+    if (profitTouched) return
+    const auto = calc.profit > 0 ? String(calc.profit) : ''
+    setForm((f) => (f.company_profit === auto ? f : { ...f, company_profit: auto }))
+  }, [calc.profit, profitTouched])
 
   // معاينة قابلية الترحيل (الأقلام الإلزامية: ترسيم، تخليص، سائق)
   const missing = useMemo(() => {
@@ -171,6 +183,7 @@ export default function NewShipmentPage() {
       destination: form.destination,
       entry_date: form.entry_date,
       driver_name: form.driver_name || undefined,
+      company_profit: numOrUndef(form.company_profit),
       notes: form.notes || undefined,
     }
     for (const k of FINANCIAL_KEYS) payload[k] = numOrUndef(form[k])
@@ -193,12 +206,12 @@ export default function NewShipmentPage() {
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
               <label className="label">التاجر *</label>
-              <select value={form.center_id} onChange={(e) => set('center_id', e.target.value)} required>
-                <option value="">—</option>
-                {traders.map((c) => (
-                  <option key={c.id} value={c.id}>{c.name}</option>
-                ))}
-              </select>
+              <SearchableSelect
+                value={form.center_id}
+                onChange={(v) => set('center_id', v)}
+                options={traders.map((c) => ({ value: c.id, label: c.name }))}
+                placeholder="— اختر التاجر"
+              />
               {traderBal?.data && (
                 <p className="text-[11px] text-ink-faint mt-1">
                   الرصيد الحالي: <span className="text-accent">{formatCurrency(traderBal.data.balance)}</span>
@@ -208,12 +221,12 @@ export default function NewShipmentPage() {
             </div>
             <div>
               <label className="label">المخلص</label>
-              <select value={form.clearance_center_id} onChange={(e) => set('clearance_center_id', e.target.value)}>
-                <option value="">—</option>
-                {brokers.map((c) => (
-                  <option key={c.id} value={c.id}>{c.name}</option>
-                ))}
-              </select>
+              <SearchableSelect
+                value={form.clearance_center_id}
+                onChange={(v) => set('clearance_center_id', v)}
+                options={brokers.map((c) => ({ value: c.id, label: c.name }))}
+                placeholder="— اختر المخلص"
+              />
               {brokerBal?.data && (
                 <p className="text-[11px] text-ink-faint mt-1">
                   الرصيد الحالي: <span className="text-accent">{formatCurrency(brokerBal.data.balance)}</span>
@@ -260,11 +273,27 @@ export default function NewShipmentPage() {
             </div>
             <div>
               <label className="label">المصدر *</label>
-              <input value={form.source} onChange={(e) => set('source', e.target.value)} placeholder="مرسين" required />
+              <select value={form.source} onChange={(e) => set('source', e.target.value)} required>
+                <option value="">—</option>
+                {sources.map((s) => (
+                  <option key={s.id} value={s.name}>{s.name}</option>
+                ))}
+                {form.source && !sources.some((s) => s.name === form.source) && (
+                  <option value={form.source}>{form.source}</option>
+                )}
+              </select>
             </div>
             <div>
               <label className="label">الوجهة *</label>
-              <input value={form.destination} onChange={(e) => set('destination', e.target.value)} placeholder="حلب" required />
+              <select value={form.destination} onChange={(e) => set('destination', e.target.value)} required>
+                <option value="">—</option>
+                {destinations.map((d) => (
+                  <option key={d.id} value={d.name}>{d.name}</option>
+                ))}
+                {form.destination && !destinations.some((d) => d.name === form.destination) && (
+                  <option value={form.destination}>{form.destination}</option>
+                )}
+              </select>
             </div>
           </div>
 
@@ -363,6 +392,32 @@ export default function NewShipmentPage() {
                   <input type="number" step="0.01" min="0" value={form[key]} onChange={(e) => set(key, e.target.value)} placeholder="0" />
                 </div>
               ))}
+            </div>
+            <div className="mt-3 pt-3 border-t border-surface-border">
+              <div className="flex items-center justify-between">
+                <label className="label text-success">مربحنا (ما نأخذه من التاجر)</label>
+                {profitTouched ? (
+                  <button
+                    type="button"
+                    onClick={() => setProfitTouched(false)}
+                    className="text-[11px] text-accent hover:text-accent-hover"
+                    title="إعادة الاحتساب = فاتورة − تكلفة"
+                  >
+                    ↺ احتساب تلقائي
+                  </button>
+                ) : (
+                  <span className="text-[10px] text-info">تلقائي = فاتورة − تكلفة</span>
+                )}
+              </div>
+              <input
+                type="number"
+                step="0.01"
+                min="0"
+                value={form.company_profit}
+                onChange={(e) => { setProfitTouched(true); set('company_profit', e.target.value) }}
+                placeholder="0"
+              />
+              <p className="text-[11px] text-ink-faint mt-1">يُحتسب تلقائياً من مربح الشركة، ويظهر مجموعه في تفاصيل الميزانية كمربح اليوم</p>
             </div>
           </div>
         </div>

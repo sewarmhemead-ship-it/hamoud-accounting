@@ -31,6 +31,7 @@ const emptyOffset = () => ({
   from_center_id: '',
   to_center_id: '',
   amount: '',
+  date: todayISO(),
   notes: '',
 })
 
@@ -132,6 +133,7 @@ export default function CashOperationsPage() {
       from_center_id: parseInt(offsetForm.from_center_id, 10),
       to_center_id: parseInt(offsetForm.to_center_id, 10),
       amount: parseFloat(offsetForm.amount),
+      date: offsetForm.date,
       notes: offsetForm.notes || undefined,
     })
   }
@@ -298,6 +300,15 @@ export default function CashOperationsPage() {
                   min="0.01"
                   value={offsetForm.amount}
                   onChange={(e) => setOffsetForm({ ...offsetForm, amount: e.target.value })}
+                  required
+                />
+              </div>
+              <div>
+                <label className="label">تاريخ المقاصة *</label>
+                <input
+                  type="date"
+                  value={offsetForm.date}
+                  onChange={(e) => setOffsetForm({ ...offsetForm, date: e.target.value })}
                   required
                 />
               </div>

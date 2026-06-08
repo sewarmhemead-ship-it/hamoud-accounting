@@ -15,6 +15,7 @@ const STATE_BADGE = {
 
 function ledgerRowClass(kind) {
   if (kind === 'payment' || kind === 'offset_payment') return 'bg-success/5'
+  if (kind === 'expense') return 'bg-info/5'
   if (kind === 'offset_charge') return 'bg-warning/5'
   return ''
 }
@@ -24,7 +25,7 @@ function isChargeLedgerRow(kind) {
 }
 
 function isPaymentLedgerRow(kind) {
-  return kind === 'payment' || kind === 'offset_payment'
+  return kind === 'payment' || kind === 'offset_payment' || kind === 'expense'
 }
 
 export default function BrokerStatementPage() {
@@ -149,7 +150,7 @@ export default function BrokerStatementPage() {
                 {stmt.wip.incomplete.rows.map((r) => (
                   <div key={r.id} className="flex items-center justify-between text-sm">
                     <Link to={`/shipments/${r.id}`} className="text-accent hover:underline">
-                      {r.ref_number} — {r.goods_name || '—'}
+                      {r.goods_type || '—'}{r.driver ? ` — ${r.driver}` : ''}
                     </Link>
                     <span className="text-ink-soft text-xs">
                       ينقص: {r.missing.join('، ')}
@@ -168,6 +169,8 @@ export default function BrokerStatementPage() {
                   <th className="py-3 px-3 text-right">م</th>
                   <th className="py-3 px-3 text-right">التاريخ</th>
                   <th className="py-3 px-3 text-right">البيان</th>
+                  <th className="py-3 px-3 text-right">السائق</th>
+                  <th className="py-3 px-3 text-right">المعبر</th>
                   {hasTrader && <th className="py-3 px-3 text-right">التاجر</th>}
                   {cols.map((c) => (
                     <th key={c.key} className="py-3 px-3 text-left">
@@ -182,7 +185,7 @@ export default function BrokerStatementPage() {
                 {rows.length === 0 && (
                   <tr>
                     <td
-                      colSpan={5 + cols.length + (hasTrader ? 1 : 0)}
+                      colSpan={7 + cols.length + (hasTrader ? 1 : 0)}
                       className="py-8 text-center text-ink-soft"
                     >
                       لا توجد سيارات مُرحَّلة أو دفعات بعد
@@ -202,11 +205,22 @@ export default function BrokerStatementPage() {
                           to={`/shipments/${r.id}`}
                           className="text-accent hover:underline"
                         >
-                          {r.goods_name || r.ref_number}
+                          {r.goods_type || '—'}
                         </Link>
                       ) : (
-                        <span className="text-ink">{r.label}</span>
+                        <span className="text-ink">
+                          {r.kind === 'expense' && (
+                            <span className="pill text-[10px] bg-info/15 text-info border border-info/25 ml-1">مصروف</span>
+                          )}
+                          {r.label}
+                        </span>
                       )}
+                    </td>
+                    <td className="py-2.5 px-3 text-right text-ink-soft">
+                      {r.kind === 'truck' ? r.driver || '—' : ''}
+                    </td>
+                    <td className="py-2.5 px-3 text-right text-ink-soft">
+                      {r.kind === 'truck' ? r.border || '—' : ''}
                     </td>
                     {hasTrader && (
                       <td className="py-2.5 px-3 text-right text-ink-soft">
@@ -235,7 +249,7 @@ export default function BrokerStatementPage() {
                 <tfoot>
                   <tr className="border-t-2 border-surface-border font-bold bg-surface/50">
                     <td
-                      colSpan={3 + (hasTrader ? 1 : 0) + cols.length}
+                      colSpan={5 + (hasTrader ? 1 : 0) + cols.length}
                       className="py-3 px-3 text-right"
                     >
                       اجمالي العمليات الحسابية
@@ -247,9 +261,23 @@ export default function BrokerStatementPage() {
                       {formatCurrency(stmt.totals.payments_total)}
                     </td>
                   </tr>
+                  {stmt.totals.expenses_total > 0 && (
+                    <tr className="text-info/90">
+                      <td
+                        colSpan={5 + (hasTrader ? 1 : 0) + cols.length}
+                        className="py-2 px-3 text-right text-xs"
+                      >
+                        منها بنود مصاريف
+                      </td>
+                      <td className="py-2 px-3" />
+                      <td className="py-2 px-3 text-left text-xs">
+                        {formatCurrency(stmt.totals.expenses_total)}
+                      </td>
+                    </tr>
+                  )}
                   <tr className="font-bold">
                     <td
-                      colSpan={3 + (hasTrader ? 1 : 0) + cols.length}
+                      colSpan={5 + (hasTrader ? 1 : 0) + cols.length}
                       className="py-3 px-3 text-right"
                     >
                       الرصيد — {stmt.totals.direction}

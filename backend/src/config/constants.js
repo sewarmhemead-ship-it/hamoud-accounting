@@ -26,10 +26,12 @@ const SHIPMENT_STATUS = {
 }
 
 const SHIPMENT_REQUIRED_FIELDS = {
-  required: ['tarseem', 'syrian_driver', 'clearance_fee'],
+  // سائق سوري/تركي ليس إلزامياً للترحيل — بعض السيارات تُرحَّل دون هذا البند
+  required: ['tarseem', 'clearance_fee'],
   optional: [
     'service_fee',
     'workers',
+    'syrian_driver',
     'turkish_transport',
     'internal_transport',
     'door_receipt',

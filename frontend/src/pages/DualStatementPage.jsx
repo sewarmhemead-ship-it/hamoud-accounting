@@ -20,6 +20,8 @@ function SideTable({ side, accent, field }) {
             <th className="py-2.5 px-2 text-right">م</th>
             <th className="py-2.5 px-2 text-right">التاريخ</th>
             <th className="py-2.5 px-2 text-right">البيان</th>
+            <th className="py-2.5 px-2 text-right">السائق</th>
+            <th className="py-2.5 px-2 text-right">المعبر</th>
             {cols.map((c) => (
               <th key={c.key} className="py-2.5 px-2 text-left">
                 {c.label}
@@ -32,7 +34,7 @@ function SideTable({ side, accent, field }) {
         <tbody>
           {rows.length === 0 && (
             <tr>
-              <td colSpan={5 + cols.length} className="py-8 text-center text-ink-soft">
+              <td colSpan={7 + cols.length} className="py-8 text-center text-ink-soft">
                 لا توجد سيارات مُرحَّلة أو دفعات بعد
               </td>
             </tr>
@@ -50,11 +52,17 @@ function SideTable({ side, accent, field }) {
                 <td className="py-2 px-2 text-right">
                   {r.kind === 'truck' ? (
                     <Link to={`/shipments/${r.id}`} className="text-accent hover:underline">
-                      {r.goods_name || r.ref_number}
+                      {r.goods_type || '—'}
                     </Link>
                   ) : (
                     <span className="text-ink">{r.label}</span>
                   )}
+                </td>
+                <td className="py-2 px-2 text-right text-ink-soft">
+                  {r.kind === 'truck' ? r.driver || '—' : ''}
+                </td>
+                <td className="py-2 px-2 text-right text-ink-soft">
+                  {r.kind === 'truck' ? r.border || '—' : ''}
                 </td>
                 {cols.map((c) => (
                   <td key={c.key} className="py-2 px-2 text-left text-ink">
@@ -76,7 +84,7 @@ function SideTable({ side, accent, field }) {
         {rows.length > 0 && (
           <tfoot>
             <tr className="border-t-2 border-surface-border font-bold bg-surface/50">
-              <td colSpan={3 + cols.length} className="py-2.5 px-2 text-right">
+              <td colSpan={5 + cols.length} className="py-2.5 px-2 text-right">
                 المجموع
               </td>
               <td className="py-2.5 px-2 text-left">{formatCurrency(side.total_charges)}</td>
@@ -85,7 +93,7 @@ function SideTable({ side, accent, field }) {
               </td>
             </tr>
             <tr className="font-bold">
-              <td colSpan={3 + cols.length} className="py-2.5 px-2 text-right">
+              <td colSpan={5 + cols.length} className="py-2.5 px-2 text-right">
                 الرصيد — {side.direction}
               </td>
               <td colSpan={2} className="py-2.5 px-2 text-left text-accent">

@@ -92,7 +92,7 @@ describe('المربح اليومي — ربط end-to-end', () => {
   })
 
   it('إغلاق اليوم يحفظ نفس حسابات المعاينة + الفروقات والمصاريف', () => {
-    const truck = ShipmentService.createShipment(fullShipment(), ctx.adminId)
+    const truck = ShipmentService.createShipment(fullShipment({ company_profit: 300 }), ctx.adminId)
     ShipmentService.postShipment(truck.id, ctx.adminId)
 
     AccountingService.createPayment(
@@ -121,7 +121,9 @@ describe('المربح اليومي — ربط end-to-end', () => {
     )
 
     expect(closed.num_trucks).toBe(preview.num_trucks)
-    expect(closed.gross_profit).toBe(preview.gross_revenue + 15)
+    // الأساس الآن = مجموع «مربحنا» (300) لا إجمالي التخليص + فروقات (10+5)
+    expect(preview.gross_profit).toBe(300)
+    expect(closed.gross_profit).toBe(300 + 15)
     expect(closed.net_profit).toBe(closed.gross_profit - 35)
 
     const stored = ProfitService.getByDate(ctx.testDate)
@@ -164,13 +166,38 @@ describe('المربح اليومي — ربط end-to-end', () => {
   })
 
   it('تقرير اليوم يستخدم نفس getDayDetail', () => {
-    const truck = ShipmentService.createShipment(fullShipment(), ctx.adminId)
+    const truck = ShipmentService.createShipment(fullShipment({ company_profit: 400 }), ctx.adminId)
     ShipmentService.postShipment(truck.id, ctx.adminId)
 
     const report = DailyProfitReportService.buildDay(ctx.testDate)
-    expect(report.preview.gross_revenue).toBe(2580)
+    expect(report.preview.gross_revenue).toBe(2580) // إجمالي فاتورة التخليص (للمطابقة)
     expect(report.movements).toHaveLength(1)
-    expect(report.waterfall.base_clearance).toBe(2580)
+    expect(report.waterfall.base_clearance).toBe(400) // الأساس = مجموع مربحنا
+  })
+
+  it('مجموع «مربحنا» للسيارات المُرحَّلة = مربح اليوم ويظهر في التفاصيل', () => {
+    const t1 = ShipmentService.createShipment(fullShipment({ goods_name: 'رز', company_profit: 300 }), ctx.adminId)
+    const t2 = ShipmentService.createShipment(fullShipment({ goods_name: 'سكر', company_profit: 200 }), ctx.adminId)
+    ShipmentService.postShipment(t1.id, ctx.adminId)
+    ShipmentService.postShipment(t2.id, ctx.adminId)
+
+    const day = ProfitService.calculateDay(ctx.testDate)
+    expect(day.num_trucks).toBe(2)
+    expect(day.gross_profit).toBe(500) // 300 + 200
+
+    const detail = ProfitService.getDayDetail(ctx.testDate)
+    const profits = detail.movements.map((m) => m.company_profit).sort()
+    expect(profits).toEqual([200, 300])
+  })
+
+  it('سيارة بلا «مربحنا» تساهم بصفر في مربح اليوم', () => {
+    const truck = ShipmentService.createShipment(fullShipment(), ctx.adminId)
+    ShipmentService.postShipment(truck.id, ctx.adminId)
+
+    const day = ProfitService.calculateDay(ctx.testDate)
+    expect(day.num_trucks).toBe(1)
+    expect(day.gross_profit).toBe(0)
+    expect(day.gross_revenue).toBe(2580) // التخليص ما زال محسوباً للمطابقة
   })
 
   it('سيارة بتاريخ مختلف لا تدخل يوم entry_date', () => {

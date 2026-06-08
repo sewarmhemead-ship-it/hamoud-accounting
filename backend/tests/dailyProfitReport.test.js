@@ -42,6 +42,7 @@ describe('parseExpenseNotes / sumExpenseLines', () => {
 describe('buildWaterfall — توافق مع المحرك', () => {
   const preview = {
     gross_revenue: 580,
+    gross_profit: 580, // أساس المربح اليومي = مجموع «مربحنا»
     num_trucks: 3,
     payments_received: 200,
   }

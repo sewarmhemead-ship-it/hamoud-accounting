@@ -66,7 +66,7 @@ function traderWorkbook(data) {
   })
 
   const priceCols = data.price_columns
-  const header = ['التاريخ', 'رقم', 'البضاعة', 'المصدر', 'الوجهة', 'الوزن', ...priceCols.map((c) => c.label), 'المجموع']
+  const header = ['التاريخ', 'السائق', 'البضاعة', 'المعبر', 'الوجهة', 'الوزن', ...priceCols.map((c) => c.label), 'المجموع']
   const span = header.length
 
   titleBlock(ws, data, 'كشف حساب التاجر', span)
@@ -76,9 +76,9 @@ function traderWorkbook(data) {
   for (const r of data.rows) {
     ws.addRow([
       fmtDate(r.entry_date),
-      r.ref_number,
-      r.goods_name || '',
-      r.source || '',
+      r.driver || '',
+      r.goods_type || '',
+      r.border || '',
       r.destination || '',
       r.weight || '',
       ...priceCols.map((c) => r.price[c.key] || 0),
@@ -306,14 +306,15 @@ function dailyProfitWorkbook(data) {
   wsB.addRow([])
   const bh = wsB.addRow(['البند', 'التفاصيل', 'المبلغ'])
   styleHeaderRow(bh)
-  wsB.addRow(['تخليص الشركة (أساس)', 'قيود تاجر مرحّلة', w.base_clearance])
+  wsB.addRow(['سيارات مرحّلة اليوم', 'عدد', w.num_trucks || 0])
+  wsB.addRow(['مربح السيارات', 'مجموع مربحنا', w.base_clearance])
   for (const [k, label] of Object.entries(data.diff_labels || {})) {
     wsB.addRow([label, 'فرق يدوي', w.diffs[k] || 0])
   }
   totalsRow(wsB, ['إجمالي اليوم', '', w.gross_profit])
-  wsB.addRow(['مصاريف مكتب', '', w.office_expenses])
-  wsB.addRow(['مصاريف منزل', '', w.home_expenses])
-  totalsRow(wsB, ['صافي اليوم', '', w.net_profit])
+  wsB.addRow(['مصاريف المكتب', '', w.office_expenses])
+  wsB.addRow(['مصاريف المنزل', '', w.home_expenses])
+  totalsRow(wsB, ['صافي المربح', '', w.net_profit])
   const expenseSections = [
     ['office', 'تفصيل مكتب'],
     ['operations', 'تفصيل تشغيلية'],

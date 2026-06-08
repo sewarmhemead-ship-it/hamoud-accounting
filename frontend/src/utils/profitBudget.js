@@ -2,6 +2,7 @@ export const EXPENSE_SECTIONS = [
   {
     key: 'office',
     label: 'مصاريف المكتب',
+    allowCenter: true,
     presets: [
       'إيجار مكتب',
       'رواتب إدارية',
@@ -16,6 +17,7 @@ export const EXPENSE_SECTIONS = [
   {
     key: 'operations',
     label: 'مصاريف تشغيلية',
+    allowCenter: true,
     presets: [
       'ديزل / وقود',
       'صيانة شاحنات',
@@ -32,10 +34,12 @@ export const EXPENSE_SECTIONS = [
     label: 'متفرقة (اختر وجهة الخصم)',
     presets: ['سلفة', 'تسوية', 'هدايا', 'تبرعات', 'غير مصنّف', 'أخرى'],
     allowBucket: true,
+    allowCenter: true,
   },
   {
     key: 'home',
     label: 'مصاريف المنزل / شخصية',
+    allowCenter: true,
     presets: [
       'إيجار سكن',
       'كهرباء وماء',
@@ -49,7 +53,7 @@ export const EXPENSE_SECTIONS = [
 ]
 
 export function emptyLine(bucket = 'office') {
-  return { label: '', amount: '', bucket }
+  return { label: '', amount: '', bucket, center_id: '', center_name: '', expense_tx: '' }
 }
 
 export function emptyExpenseState() {
@@ -73,6 +77,9 @@ export function parseBudgetNotes(notes) {
           label: l.label || '',
           amount: l.amount != null ? String(l.amount) : '',
           bucket: l.bucket === 'home' ? 'home' : defaultBucket || 'office',
+          center_id: l.center_id != null ? String(l.center_id) : '',
+          center_name: l.center_name || '',
+          expense_tx: l.expense_tx || '',
         }))
       return {
         memo: j.memo || '',
@@ -116,6 +123,13 @@ export function serializeBudgetNotes(memo, sections, parseNum) {
           amount: parseNum(l.amount),
         }
         if (allowBucket && l.bucket === 'home') row.bucket = 'home'
+        // من أي مركز اُخذ المصروف (تاجر/مخلص) — تسجيل ضمن البند
+        if (l.center_id) {
+          row.center_id = Number(l.center_id)
+          if (l.center_name) row.center_name = l.center_name
+        }
+        // علامة الخصم المُنفَّذ — تُحفظ كما هي لمنع تكرار الخصم عند إعادة الحفظ
+        if (l.expense_tx) row.expense_tx = l.expense_tx
         return row
       })
 

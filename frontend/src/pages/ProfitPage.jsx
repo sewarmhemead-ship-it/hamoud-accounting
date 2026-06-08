@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { profitApi } from '../api'
+import { profitApi, centersApi } from '../api'
 import ReportExportButtons from '../components/ReportExportButtons'
 import GlassPanel from '../components/ui/GlassPanel'
 import KpiStatCard from '../components/ui/KpiStatCard'
@@ -151,6 +151,12 @@ export default function ProfitPage() {
     queryFn: () => profitApi.monthly(parseInt(year, 10), parseInt(month, 10)),
   })
 
+  const { data: centersRes } = useQuery({
+    queryKey: ['centers'],
+    queryFn: () => centersApi.list({ limit: 500 }),
+  })
+  const centers = centersRes?.data || []
+
   const detail = detailRes?.data
   const preview = detail?.preview
   const closed = detail?.closed
@@ -214,7 +220,7 @@ export default function ProfitPage() {
         trucks: Number(closed.num_trucks) || 0,
       }
     }
-    const base = preview?.gross_revenue || 0
+    const base = preview?.gross_profit || 0
     const diffSum = DIFF_FIELDS.reduce((s, f) => s + n(diffs[f.key]), 0)
     const gross = base + diffSum
     return {
@@ -231,6 +237,31 @@ export default function ProfitPage() {
   const invalidateAll = () => {
     queryClient.invalidateQueries({ queryKey: ['profit'] })
     queryClient.invalidateQueries({ queryKey: ['dashboard'] })
+  }
+
+  // بنود الميزانية المرتبطة بمركز ولم تُخصم بعد — تتطلب تأكيداً قبل الخصم الفعلي
+  const pendingDeductions = () => {
+    const out = []
+    for (const key of Object.keys(expenseSections)) {
+      for (const l of expenseSections[key] || []) {
+        const amt = n(l.amount)
+        if (l.center_id && amt > 0 && !l.expense_tx) {
+          out.push({ name: l.center_name || 'مركز', amount: amt, label: l.label || 'مصروف' })
+        }
+      }
+    }
+    return out
+  }
+
+  const confirmDeductions = () => {
+    const pend = pendingDeductions()
+    if (pend.length === 0) return true
+    const lines = pend
+      .map((p) => `• ${p.label}: ${formatCurrency(p.amount)} — من «${p.name}»`)
+      .join('\n')
+    return window.confirm(
+      `سيتم خصم البنود التالية فعلياً من حسابات المراكز:\n\n${lines}\n\nتأكيد التنفيذ؟`
+    )
   }
 
   const buildPayload = () => ({
@@ -347,22 +378,22 @@ export default function ProfitPage() {
       </GlassPanel>
 
       <div className="grid grid-cols-2 lg:grid-cols-5 gap-4">
-        <KpiStatCard icon="🏛" label="تخليص الشركة" value={view.base} sub="أساس — قيود تاجر" tone="accent" />
         <KpiStatCard
           icon="🚛"
-          label="سيارات مرحّلة"
+          label="سيارات مرحّلة اليوم"
           value={view.trucks}
           format="number"
           sub={movementsMatch ? 'متطابق مع القيود' : 'تحقق من القيود'}
           tone="accent"
         />
-        <KpiStatCard icon="💵" label="دفعات اليوم" value={preview?.payments_received || 0} sub="وارد نقدي" tone="accent" />
-        <KpiStatCard icon="∑" label="إجمالي اليوم" value={view.gross} sub="تخليص + فروقات" tone="warning" />
+        <KpiStatCard icon="🏛" label="مربح السيارات" value={view.base} sub="ما نأخذه من السيارات" tone="accent" />
+        <KpiStatCard icon="🏢" label="مصاريف المكتب" value={view.office} sub="مكتب + تشغيل + متفرقة" tone="warning" />
+        <KpiStatCard icon="🏠" label="مصاريف المنزل" value={view.home} sub="منزل / شخصية" tone="warning" />
         <KpiStatCard
           icon="💰"
-          label="صافي اليوم"
+          label="صافي المربح"
           value={view.net}
-          sub="بعد المصاريف"
+          sub="بعد كل المصاريف"
           tone={view.net >= 0 ? 'success' : 'danger'}
         />
       </div>
@@ -409,11 +440,12 @@ export default function ProfitPage() {
                 parseNum={n}
                 memo={memo}
                 setMemo={setMemo}
+                centers={centers}
               />
               <button
                 type="button"
                 className="btn-success w-full"
-                onClick={() => closeMutation.mutate()}
+                onClick={() => { if (confirmDeductions()) closeMutation.mutate() }}
                 disabled={closeMutation.isPending}
               >
                 {closeMutation.isPending ? 'جاري الإغلاق...' : 'إغلاق اليوم وحفظ الميزانية'}
@@ -449,12 +481,13 @@ export default function ProfitPage() {
                 parseNum={n}
                 memo={memo}
                 setMemo={setMemo}
+                centers={centers}
               />
               <div className="flex gap-2">
                 <button
                   type="button"
                   className="btn-success flex-1"
-                  onClick={() => updateMutation.mutate()}
+                  onClick={() => { if (confirmDeductions()) updateMutation.mutate() }}
                   disabled={updateMutation.isPending}
                 >
                   حفظ التعديل
@@ -483,14 +516,14 @@ export default function ProfitPage() {
 
         <GlassPanel className="xl:col-span-1">
           <h3 className="font-semibold text-ink mb-3">تفصيل الميزانية</h3>
-          <WaterfallRow label="تخليص الشركة (أساس)" value={view.base} />
+          <WaterfallRow label="مربح السيارات" value={view.base} />
           {DIFF_FIELDS.map((f) => (
             <WaterfallRow key={f.key} op="+" label={f.label} value={view.diffs[f.key]} />
           ))}
           <WaterfallRow label="إجمالي اليوم" value={view.gross} strong />
-          <WaterfallRow op="−" label="مصاريف مكتب" value={view.office} />
-          <WaterfallRow op="−" label="مصاريف منزل" value={view.home} />
-          <WaterfallRow label="صافي اليوم" value={view.net} strong tone={view.net >= 0 ? 'pos' : 'neg'} />
+          <WaterfallRow op="−" label="مصاريف المكتب" value={view.office} />
+          <WaterfallRow op="−" label="مصاريف المنزل" value={view.home} />
+          <WaterfallRow label="صافي المربح" value={view.net} strong tone={view.net >= 0 ? 'pos' : 'neg'} />
         </GlassPanel>
 
         <GlassPanel className="xl:col-span-1 overflow-hidden flex flex-col max-h-[420px]">
@@ -507,6 +540,7 @@ export default function ProfitPage() {
                     <th className="text-right py-2">رقم</th>
                     <th className="text-right py-2">تاجر</th>
                     <th className="text-left py-2">إيراد</th>
+                    <th className="text-left py-2">مربحنا</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -519,6 +553,7 @@ export default function ProfitPage() {
                       </td>
                       <td className="py-2 text-ink-soft truncate max-w-[8rem]">{m.trader_name}</td>
                       <td className="py-2 text-left tabular-nums font-medium">{formatCurrency(m.clearance_amount)}</td>
+                      <td className="py-2 text-left tabular-nums font-semibold text-success">{formatCurrency(m.company_profit || 0)}</td>
                     </tr>
                   ))}
                 </tbody>

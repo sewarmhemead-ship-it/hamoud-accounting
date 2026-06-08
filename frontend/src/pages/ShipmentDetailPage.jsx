@@ -302,6 +302,13 @@ export default function ShipmentDetailPage() {
         </div>
       )}
 
+      {/* مربح الشركة لكل سيارة — أساس المربح اليومي */}
+      <div className="card space-y-3">
+        <h3 className="font-semibold text-success text-sm">مربحنا (ما نأخذه من التاجر)</h3>
+        {renderFieldRow('company_profit', 'مربحنا')}
+        <p className="text-[11px] text-ink-faint">يظهر مجموعه في تفاصيل الميزانية كمربح اليوم.</p>
+      </div>
+
       {/* زر حفظ التعديلات */}
       {canEdit && (
         <div className="card space-y-3">

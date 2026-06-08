@@ -38,6 +38,13 @@ describe('classifyPostability — حالة الترحيل', () => {
     expect(r.missing).toContain('اتعاب')
   })
 
+  it('سائق سوري ليس إلزامياً ⇒ تُرحَّل بدونه', () => {
+    const r = classifyPostability(completeTruck({ status: 'pending', syrian_driver: null }))
+    expect(r.state).toBe(POSTABILITY.POSTABLE)
+    expect(r.is_postable).toBe(true)
+    expect(r.missing).not.toContain('سائق سوري')
+  })
+
   it('سيارة مُرحَّلة تبقى مُرحَّلة', () => {
     expect(classifyPostability(completeTruck({ status: 'posted' })).state).toBe(
       POSTABILITY.POSTED
@@ -183,12 +190,81 @@ describe('buildBrokerStatement — الكشف الموحّد', () => {
     expect(stmt.rows[0].total).toBe(2430)
   })
 
+  it('بند مصروف (category=expense) ⇒ صف منفصل ويخفّض الرصيد', () => {
+    const stmt = buildBrokerStatement({
+      shipments: [completeTruck({ id: 1, status: 'posted' })], // 8584
+      payments: [
+        { id: 5, date: '2026-02-12', amount_usd: 1000, notes: 'دفعة', category: 'payment' },
+        { id: 6, date: '2026-02-13', amount_usd: 600, notes: 'إيجار المكتب', category: 'expense' },
+      ],
+      centerType: 'broker',
+    })
+    const expenseRow = stmt.rows.find((r) => r.kind === 'expense')
+    expect(expenseRow).toBeTruthy()
+    expect(expenseRow.label).toBe('إيجار المكتب')
+    // المصاريف تدخل ضمن الدفعات وتخفّض الرصيد: 8584 - (1000 + 600) = 6984
+    expect(stmt.totals.payments_total).toBe(1600)
+    expect(stmt.totals.expenses_total).toBe(600)
+    expect(stmt.totals.balance).toBe(6984)
+  })
+
+  it('بلا بنود مصاريف ⇒ expenses_total = 0', () => {
+    const stmt = buildBrokerStatement({
+      shipments: [completeTruck({ id: 1, status: 'posted' })],
+      payments: [{ id: 5, date: '2026-02-12', amount_usd: 1000, notes: 'دفعة' }],
+    })
+    expect(stmt.totals.expenses_total).toBe(0)
+  })
+
   it('كشف فارغ تماماً ⇒ أصفار', () => {
     const stmt = buildBrokerStatement({ shipments: [], payments: [] })
     expect(stmt.totals.balance).toBe(0)
     expect(stmt.totals.direction).toBe('متوازن')
     expect(stmt.rows).toEqual([])
     expect(stmt.columns).toEqual([])
+  })
+
+  it('سطر السيارة يحمل نوع البضاعة (goods_type) من goods_type_name', () => {
+    const stmt = buildBrokerStatement({
+      shipments: [
+        completeTruck({ id: 1, status: 'posted', goods_name: 'رز هندي', goods_type_name: 'مواد غذائية' }),
+      ],
+      payments: [],
+    })
+    expect(stmt.rows[0].goods_type).toBe('مواد غذائية')
+    expect(stmt.rows[0].goods_name).toBe('رز هندي')
+  })
+
+  it('سطر السيارة يحمل اسم السائق (driver) من driver_name', () => {
+    const stmt = buildBrokerStatement({
+      shipments: [completeTruck({ id: 1, status: 'posted', driver_name: 'أبو محمد' })],
+      payments: [],
+    })
+    expect(stmt.rows[0].driver).toBe('أبو محمد')
+  })
+
+  it('بلا سائق ⇒ driver = null', () => {
+    const stmt = buildBrokerStatement({
+      shipments: [completeTruck({ id: 1, status: 'posted', driver_name: undefined })],
+      payments: [],
+    })
+    expect(stmt.rows[0].driver).toBeNull()
+  })
+
+  it('سطر السيارة يحمل المعبر (border) من border_name', () => {
+    const stmt = buildBrokerStatement({
+      shipments: [completeTruck({ id: 1, status: 'posted', border_name: 'باب الهوى' })],
+      payments: [],
+    })
+    expect(stmt.rows[0].border).toBe('باب الهوى')
+  })
+
+  it('بلا نوع بضاعة ⇒ goods_type = null', () => {
+    const stmt = buildBrokerStatement({
+      shipments: [completeTruck({ id: 1, status: 'posted', goods_type_name: undefined })],
+      payments: [],
+    })
+    expect(stmt.rows[0].goods_type).toBeNull()
   })
 
   it('مدخل غير مصفوفة ⇒ CalculationError', () => {
@@ -266,6 +342,31 @@ describe('buildDualStatement — الكشف المزدوج (مخلص + تاجر)
     expect(stmt.company_profit.total).toBe(0)
     expect(stmt.company_profit.per_truck_avg).toBe(0)
     expect(stmt.broker_side.direction).toBe('متوازن')
+  })
+
+  it('سطر السيارة في الكشف المزدوج يحمل نوع البضاعة (goods_type)', () => {
+    const stmt = buildDualStatement({
+      shipments: [dualTruck({ goods_name: 'رز هندي', goods_type_name: 'مواد غذائية' })],
+    })
+    const truckRow = stmt.broker_side.rows.find((r) => r.kind === 'truck')
+    expect(truckRow.goods_type).toBe('مواد غذائية')
+    expect(truckRow.goods_name).toBe('رز هندي')
+  })
+
+  it('سطر السيارة في الكشف المزدوج يحمل اسم السائق (driver)', () => {
+    const stmt = buildDualStatement({
+      shipments: [dualTruck({ driver_name: 'أبو محمد' })],
+    })
+    const truckRow = stmt.broker_side.rows.find((r) => r.kind === 'truck')
+    expect(truckRow.driver).toBe('أبو محمد')
+  })
+
+  it('سطر السيارة في الكشف المزدوج يحمل المعبر (border) من border_name', () => {
+    const stmt = buildDualStatement({
+      shipments: [dualTruck({ border_name: 'باب الهوى' })],
+    })
+    const truckRow = stmt.broker_side.rows.find((r) => r.kind === 'truck')
+    expect(truckRow.border).toBe('باب الهوى')
   })
 
   it('مدخل غير مصفوفة ⇒ CalculationError', () => {

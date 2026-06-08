@@ -133,7 +133,8 @@ function buildWaterfall(preview, closed, live = {}) {
     }
   }
 
-  const base = preview?.gross_revenue || 0
+  // الأساس = مجموع «مربحنا» للسيارات المُرحَّلة (لا إجمالي فواتير التخليص)
+  const base = preview?.gross_profit || 0
   const diffs = Object.fromEntries(
     DIFF_KEYS.map((k) => [k, Number(live[k]) || 0])
   )

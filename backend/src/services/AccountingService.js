@@ -93,6 +93,18 @@ class AccountingService {
   }
 
   /**
+   * بند مصروف يدفعه المركز (تاجر أو مخلص): قيد وارد (credit) يخفّض الدين الذي على
+   * المركز لصالحنا. يظهر مصنّفاً في الكشف بعنوان البند (notes) ضمن قسم المصاريف.
+   *
+   * @param {object} data { center_id, date, amount, currency, exchange_rate, notes }
+   *                       notes = اسم البند (مثل «إيجار مكتب»)
+   * @param {number} userId
+   */
+  createExpense(data, userId) {
+    return this._buildTx({ ...data, category: TX_CATEGORY.EXPENSE }, 'in', userId)
+  }
+
+  /**
    * تعديل حركة مالية مسجّلة — تُعيد حساب amount_usd عند تغيّر المبلغ/العملة/سعر الصرف.
    * الرصيد يُحتسب لحظياً من مجاميع الحركات، فالتعديل ينعكس فوراً على ذمة المركز.
    *
@@ -141,11 +153,13 @@ class AccountingService {
     return this._buildTx(data, 'out', userId)
   }
 
-  offsetCenters(fromCenterId, toCenterId, amount, userId, notes, refOut, refIn) {
+  offsetCenters(fromCenterId, toCenterId, amount, userId, notes, refOut, refIn, date) {
     const fromCenter = CenterModel.findById(fromCenterId)
     const toCenter = CenterModel.findById(toCenterId)
     const offsetNotes = buildOffsetNotes(fromCenter, toCenter, amount, notes)
     const pairRef = refOut || refIn
+    // تاريخ المقاصة كما يحدّده المستخدم؛ وإلا لحظة التنفيذ
+    const offsetDate = date || nowISO()
 
     const baseData = {
       currency: CURRENCY.USD,
@@ -161,7 +175,7 @@ class AccountingService {
       const creditTx = TransactionModel.create({
         ...baseData,
         ref_number: refOut,
-        date:       nowISO(),
+        date:       offsetDate,
         type:       'in',
         center_id:  fromCenterId,
         notes:      `${offsetNotes} [${pairRef}]`,
@@ -170,7 +184,7 @@ class AccountingService {
       const debitTx = TransactionModel.create({
         ...baseData,
         ref_number: refIn,
-        date:       nowISO(),
+        date:       offsetDate,
         type:       'out',
         center_id:  toCenterId,
         notes:      `${offsetNotes} [${pairRef}]`,

@@ -29,6 +29,7 @@ describe('المربح اليومي — clearance_diff', () => {
         clearance_fee: 50,
         turkish_transport: 200,
         service_fee: 30,
+        company_profit: 250,
       },
       ctx.adminId
     )
@@ -36,6 +37,7 @@ describe('المربح اليومي — clearance_diff', () => {
 
     const preview = ProfitService.calculateDay(ctx.testDate)
     expect(preview.gross_revenue).toBeGreaterThan(0)
+    expect(preview.gross_profit).toBe(250)
 
     const closed = ProfitService.closeDay(
       ctx.testDate,
@@ -52,6 +54,7 @@ describe('المربح اليومي — clearance_diff', () => {
     )
 
     expect(closed.clearance_diff).toBe(50)
-    expect(closed.gross_profit).toBe(preview.gross_revenue + 50 + 10)
+    // الأساس = مجموع «مربحنا» (250) + فرق التخليص (50) + فرق النقل (10)
+    expect(closed.gross_profit).toBe(250 + 50 + 10)
   })
 })

@@ -133,23 +133,27 @@ class ShipmentModel extends BaseModel {
   }
 
   findByBroker(brokerId, { status, limit = 50, offset = 0 } = {}) {
-    const conditions = ['clearance_center_id = ?', 'is_deleted = 0']
+    const conditions = ['s.clearance_center_id = ?', 's.is_deleted = 0']
     const params = [brokerId]
 
     if (status) {
-      conditions.push('status = ?')
+      conditions.push('s.status = ?')
       params.push(status)
     }
 
     const where = conditions.join(' AND ')
     const rows = this.db
       .prepare(
-        `SELECT * FROM shipments WHERE ${where} ORDER BY entry_date DESC LIMIT ? OFFSET ?`
+        `SELECT s.*, gt.name AS goods_type_name, b.name AS border_name
+         FROM shipments s
+         LEFT JOIN goods_types gt ON gt.id = s.goods_type_id
+         LEFT JOIN borders b ON b.id = s.border_id
+         WHERE ${where} ORDER BY s.entry_date DESC LIMIT ? OFFSET ?`
       )
       .all(...params, limit, offset)
 
     const { count: total } = this.db
-      .prepare(`SELECT COUNT(*) as count FROM shipments WHERE ${where}`)
+      .prepare(`SELECT COUNT(*) as count FROM shipments s WHERE ${where}`)
       .get(...params)
 
     return { rows, total }
@@ -196,7 +200,8 @@ class ShipmentModel extends BaseModel {
         s.*,
         c.name AS center_name,
         cb.name AS broker_name,
-        b.name AS border_name
+        b.name AS border_name,
+        gt.name AS goods_type_name
       ${joins}
       WHERE ${where}
       ORDER BY s.entry_date DESC

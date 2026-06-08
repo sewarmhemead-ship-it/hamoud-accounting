@@ -68,8 +68,20 @@ const transactionController = {
     res.status(201).json(apiResponse.success(tx, 'تم تسجيل الدفعة'))
   }),
 
+  createExpense: asyncHandler(async (req, res) => {
+    const ref_number = generateRef(REF_PREFIX.TRANSACTION)
+    const { label, notes, ...rest } = req.body
+    // البند هو عنوان الحركة؛ الملاحظة الإضافية تُلحَق به
+    const finalNotes = notes?.trim() ? `${label} — ${notes.trim()}` : label
+    const tx = AccountingService.createExpense(
+      { ...rest, ref_number, notes: finalNotes },
+      req.user.id
+    )
+    res.status(201).json(apiResponse.success(tx, 'تم تسجيل بند المصروف'))
+  }),
+
   offset: asyncHandler(async (req, res) => {
-    const { from_center_id, to_center_id, amount, notes } = req.body
+    const { from_center_id, to_center_id, amount, notes, date } = req.body
     const refOut = generateRef(REF_PREFIX.TRANSACTION)
     const refIn = generateRef(REF_PREFIX.TRANSACTION)
 
@@ -80,7 +92,8 @@ const transactionController = {
       req.user.id,
       notes,
       refOut,
-      refIn
+      refIn,
+      date
     )
 
     res.status(201).json(apiResponse.success(result, 'تمت المقاصة'))
